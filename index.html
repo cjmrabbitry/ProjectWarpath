@@ -197,6 +197,13 @@
   .fab-add{
     width:100%;margin-top:4px;
   }
+  .fab-capture{
+    position:fixed;bottom:22px;right:20px;width:56px;height:56px;border-radius:50%;
+    background:var(--amber);color:#fff;border:none;font-size:28px;line-height:1;
+    box-shadow:0 4px 14px rgba(31,46,41,0.28);cursor:pointer;z-index:40;
+    display:flex;align-items:center;justify-content:center;padding-bottom:3px;
+  }
+  .fab-capture:active{transform:scale(0.94);}
   a.linklike{color:var(--amber-deep);font-weight:600;cursor:pointer;}
 </style>
 </head>
@@ -214,19 +221,20 @@ const VENDORS = ['CDK','Competitor'];
 const PRIORITIES = ['High','Medium','Low'];
 const CSM_REQUEST_TYPES = ['CSS Case','Other'];
 const DEPARTMENTS = ['Accounting','Sales','Service','Parts'];
+const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const TIPS = {
-  'Renewal Upcoming': ["Open the renewal conversation 60–90 days out, not at the deadline.","Bring usage and ROI data from the current term into the conversation.","Ask what's frustrating them now, before it becomes a renewal objection."],
+  'Renewal Upcoming': ["Open the renewal conversation a year out — 6 months is the worst-case latest start.","Bring usage and ROI data from the current term into the conversation.","Ask what's frustrating them now, before it becomes a renewal objection."],
   'At Risk': ["Get face-to-face before you propose anything — don't negotiate over email first.","Pin down the actual trigger: price, service response time, or a competitor conversation.","Loop in your manager or a specialist early if the relationship has real strain."],
   'Opportunity': ["Anchor the pitch to a specific workflow gap this closes for them, not a feature list.","Bring a peer dealer's results or a short live demo instead of a deck.","Time the pitch to their renewal or budget cycle for easier approval."],
   'Healthy': ["Use the equity here to ask for a referral into another rooftop.","Check in on a light cadence even with nothing to sell — stay top of mind.","Look for one adjacent product that fits how they already work."]
 };
 
 let state = {
-  data: { accounts: [], tasks: [], csms: [], csmRequests: [] },
-  ui: { tab: 'overview', search: '', filterState: 'All', filterStatus: 'All', modal: null, deleteConfirm: null,
-    productSearch: '', filterProductCategory: 'All', filterProductVendor: 'All', filterRenewalSoon: false, routeSelection: [],
-    filterCsmStatus: 'Open' }
+  data: { accounts: [], tasks: [], csms: [], csmRequests: [], settings: { homeBase: '' }, boyfriendSchedule: { workDays: [], overrides: [] }, initiatives: [] },
+  ui: { tab: 'overview', search: '', filterStates: [], filterStatuses: [], modal: null, deleteConfirm: null,
+    productSearch: '', filterProductCategory: 'All', filterProductVendor: 'All', filterRenewalSoon: false, filterStale: false, routeSelection: [],
+    filterCsmStatus: 'Open', tripStart: null, tripNights: 1 }
 };
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -263,16 +271,50 @@ function lastVisitDate(a){
   if(!log.length) return null;
   return [...log].sort((x,y)=>y.date.localeCompare(x.date))[0].date;
 }
+function lastActivity(a){
+  const log = a.visitLog||[];
+  if(!log.length) return null;
+  return [...log].sort((x,y)=>y.date.localeCompare(x.date))[0];
+}
+const STALE_DAYS = 90;
+function isStale(a){
+  const last = lastVisitDate(a);
+  if(!last) return true;
+  return daysUntil(last) <= -STALE_DAYS;
+}
 function mapsAddress(a){ return a.address ? a.address : `${a.city}, ${a.state}`; }
 function mapsSingleUrl(a){ return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapsAddress(a))}`; }
-function mapsRouteUrl(accounts){ return `https://www.google.com/maps/dir/${accounts.map(a=>encodeURIComponent(mapsAddress(a))).join('/')}`; }
+function mapsRouteUrl(accounts){
+  const home = state.data.settings && state.data.settings.homeBase;
+  const stops = accounts.map(a=>mapsAddress(a));
+  const full = home ? [home, ...stops, home] : stops;
+  return `https://www.google.com/maps/dir/${full.map(encodeURIComponent).join('/')}`;
+}
+function nightStatus(dateStr){
+  const sched = state.data.boyfriendSchedule || { workDays:[], overrides:[] };
+  const override = sched.overrides.find(o=>o.date===dateStr);
+  if(override) return { status: override.type, note: override.note||'', override };
+  const dow = WEEKDAYS[parseLocal(dateStr).getDay()];
+  return { status: sched.workDays.includes(dow) ? 'work' : 'clear', note:'', override:null };
+}
+function nightBadge(dateStr){
+  const ns = nightStatus(dateStr);
+  const map = {
+    work: { cls:'At-Risk', label:"He's working — no override" },
+    clear: { cls:'Healthy', label:'Clear' },
+    sitter: { cls:'Healthy', label:'Sitter arranged' },
+    off: { cls:'Healthy', label:'Marked off' },
+  };
+  const m = map[ns.status] || map.clear;
+  return `<span class="badge ${m.cls}">${m.label}</span>`;
+}
 
 function seedData(){
   const emptyPlanning = () => ({ Accounting:{strengths:'',weaknesses:''}, Sales:{strengths:'',weaknesses:''}, Service:{strengths:'',weaknesses:''}, Parts:{strengths:'',weaknesses:''} });
-  const acc = (o) => ({ id: uid(), address:'', nextVisit:null, notes:'', products:[], visitLog:[], marketing:[], csmId:null, planning: emptyPlanning(), ...o });
+  const acc = (o) => ({ id: uid(), address:'', nextVisit:null, notes:'', products:[], visitLog:[], marketing:[], csmId:null, planning: emptyPlanning(), parentGroupId:null, initiativesDiscussed:[], ...o });
   const t = today();
   const prod = (category,name,vendor) => ({ id: uid(), category, name, vendor });
-  const visit = (date,notes,loggedMileage) => ({ id: uid(), date, notes: notes||'', loggedMileage: !!loggedMileage });
+  const visit = (date,notes,loggedMileage,type) => ({ id: uid(), date, type: type||'Visit', notes: notes||'', loggedMileage: !!loggedMileage });
   const mkt = (date,item) => ({ id: uid(), date, item });
 
   const csmJordan = { id: uid(), name:'Jordan Blake', email:'jordan.blake@cdk.com' };
@@ -280,6 +322,11 @@ function seedData(){
   const csmMarcus = { id: uid(), name:'Marcus Webb', email:'marcus.webb@cdk.com' };
   const csmDana = { id: uid(), name:'Dana Sutton', email:'dana.sutton@cdk.com' };
   state.data.csms = [csmJordan, csmPriya, csmMarcus, csmDana];
+  state.data.settings = { homeBase: '105 Oriole Lane, La Plata, MD' };
+  state.data.boyfriendSchedule = { workDays: [], overrides: [] };
+  const initServiceMktg = { id: uid(), title:'Service Marketing launch', description:'New add-on product — drives service-lane traffic with automated campaigns.' };
+  const initCrmRenewal = { id: uid(), title:'CRM renewal push', description:'Q1 focus: get ahead of CRM contract renewals before they go to bid.' };
+  state.data.initiatives = [initServiceMktg, initCrmRenewal];
 
   state.data.accounts = [
     acc({ name:'Crestline Ford', city:'Frederick', state:'MD', status:'Renewal Upcoming', priority:'High', renewalDate: fmtDate(addDays(t,18)), nextVisit: fmtDate(addDays(t,6)), notes:'Renewal conversation started. GM wants a pricing review before he signs.', csmId: csmJordan.id,
@@ -289,13 +336,22 @@ function seedData(){
                   Parts:{strengths:'', weaknesses:'Still on paper counter tickets.'} },
       visitLog:[ visit(fmtDate(addDays(t,-25)), 'Walked the lot, met the new service director.', true) ],
       marketing:[ mkt(fmtDate(addDays(t,-25)), 'Left CDK renewal savings one-pager with GM') ],
+      initiativesDiscussed:[ { id: uid(), initiativeId: initServiceMktg.id, date: fmtDate(addDays(t,-25)), notes: 'GM interested, wants pricing.' } ],
       products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','CDK CRM','CDK'), prod('Service','CDK Service','CDK') ] }),
     acc({ name:'Somerset Nissan', city:'Somerville', state:'NJ', status:'At Risk', priority:'High', renewalDate: fmtDate(addDays(t,22)), nextVisit: fmtDate(addDays(t,3)), notes:'Service manager complained about support response time twice this quarter.', csmId: csmPriya.id,
-      visitLog:[ visit(fmtDate(addDays(t,-51)), 'Tense visit — service dept frustrated with ticket response time.', true) ],
+      visitLog:[ visit(fmtDate(addDays(t,-51)), 'Tense visit — service dept frustrated with ticket response time.', true), visit(fmtDate(addDays(t,-8)), 'Follow-up call — service manager says response times have improved.', false, 'Call') ],
       products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','VinSolutions','Competitor'), prod('Service','CDK Service','CDK') ] }),
-    acc({ name:'Bayshore Chevrolet', city:'Ocean City', state:'MD', status:'At Risk', priority:'High', renewalDate: fmtDate(addDays(t,64)), nextVisit: null, notes:'Owner mentioned a competitor demo last call. Needs a visit booked.', csmId: csmPriya.id,
+  ];
+  const bayshoreGroup = acc({ name:'Bayshore Auto Group', city:'Ocean City', state:'MD', status:'At Risk', priority:'High', renewalDate: null, nextVisit: null, notes:'Ownership group — three rooftops. Owner mentioned a competitor demo last call.', csmId: csmPriya.id });
+  state.data.accounts.push(bayshoreGroup);
+  state.data.accounts.push(
+    acc({ name:'Bayshore Chevrolet', city:'Ocean City', state:'MD', status:'At Risk', priority:'High', renewalDate: fmtDate(addDays(t,64)), nextVisit: null, notes:'Needs a visit booked.', csmId: csmPriya.id, parentGroupId: bayshoreGroup.id,
       visitLog:[ visit(fmtDate(addDays(t,-40)), '', true) ],
       products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','DealerSocket','Competitor') ] }),
+    acc({ name:'Bayshore Kia', city:'Ocean City', state:'MD', status:'Healthy', priority:'Medium', renewalDate: fmtDate(addDays(t,190)), nextVisit: null, notes:'', csmId: csmPriya.id, parentGroupId: bayshoreGroup.id,
+      products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','CDK CRM','CDK') ] })
+  );
+  state.data.accounts.push(
     acc({ name:'Wilmington Auto Mall', city:'Wilmington', state:'DE', status:'Opportunity', priority:'Medium', renewalDate: fmtDate(addDays(t,140)), nextVisit: fmtDate(addDays(t,20)), notes:'Good fit for Service Marketing add-on — bring the one-pager.', csmId: csmJordan.id,
       visitLog:[ visit(fmtDate(addDays(t,-14)), 'Dropped off Service Marketing brochure, GM said he\'d review with partners.', false) ],
       marketing:[ mkt(fmtDate(addDays(t,-14)), 'Service Marketing brochure') ],
@@ -308,8 +364,8 @@ function seedData(){
       products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','CDK CRM','CDK'), prod('Service','CDK Service','CDK') ] }),
     acc({ name:'Turnpike Honda Group', city:'Cherry Hill', state:'NJ', status:'Healthy', priority:'Low', renewalDate: fmtDate(addDays(t,210)), nextVisit: fmtDate(addDays(t,60)), notes:'', csmId: csmMarcus.id,
       visitLog:[ visit(fmtDate(addDays(t,-9)), '', true) ],
-      products:[ prod('DMS','Reynolds & Reynolds','Competitor'), prod('CRM','Reynolds CRM','Competitor'), prod('Service','CDK Service','CDK') ] }),
-  ];
+      products:[ prod('DMS','Reynolds & Reynolds','Competitor'), prod('CRM','Reynolds CRM','Competitor'), prod('Service','CDK Service','CDK') ] })
+  );
   const findId = (name) => state.data.accounts.find(a=>a.name===name).id;
 
   state.data.csmRequests = [
@@ -377,6 +433,7 @@ async function loadFromSupabase(){
     if(error) throw error;
     if(row && row.data && Array.isArray(row.data.accounts)){
       state.data = row.data;
+      migrateDataDefaults();
     } else {
       seedData();
       await sb.from('dashboard_data').upsert({ user_id: currentUser.id, data: state.data, updated_at: new Date().toISOString() });
@@ -386,6 +443,18 @@ async function loadFromSupabase(){
     seedData();
   }
   render();
+}
+function migrateDataDefaults(){
+  if(!state.data.settings) state.data.settings = { homeBase: '' };
+  if(!state.data.boyfriendSchedule) state.data.boyfriendSchedule = { workDays: [], overrides: [] };
+  if(!state.data.boyfriendSchedule.workDays) state.data.boyfriendSchedule.workDays = [];
+  if(!state.data.boyfriendSchedule.overrides) state.data.boyfriendSchedule.overrides = [];
+  if(!state.data.initiatives) state.data.initiatives = [];
+  state.data.accounts.forEach(a=>{
+    if(a.parentGroupId===undefined) a.parentGroupId=null;
+    if(!a.initiativesDiscussed) a.initiativesDiscussed = [];
+    (a.visitLog||[]).forEach(v=>{ if(!v.type) v.type='Visit'; });
+  });
 }
 
 /* ---------- auth ---------- */
@@ -503,14 +572,18 @@ function cancelRestore(){ state.ui.pendingRestore = null; render(); }
 
 /* ---------- shared helpers ---------- */
 function getAccount(id){ return state.data.accounts.find(a=>a.id===id); }
+function childAccounts(id){ return state.data.accounts.filter(a=>a.parentGroupId===id); }
+function isGroupAccount(a){ return childAccounts(a.id).length > 0; }
+function parentAccount(a){ return a.parentGroupId ? getAccount(a.parentGroupId) : null; }
 function statusClass(s){ return s.replace(/\s+/g,'-'); }
 
-function setTab(tab){ state.ui.tab = tab; state.ui.search=''; state.ui.filterRenewalSoon=false; render(); }
+function setTab(tab){ state.ui.tab = tab; state.ui.search=''; state.ui.filterRenewalSoon=false; state.ui.filterStale=false; render(); }
 function goToAccounts(filters){
   state.ui.tab='accounts'; state.ui.search=''; state.ui.expanded=null;
-  state.ui.filterState = 'All';
-  state.ui.filterStatus = (filters && filters.status) || 'All';
+  state.ui.filterStates = [];
+  state.ui.filterStatuses = (filters && filters.status) ? [filters.status] : [];
   state.ui.filterRenewalSoon = !!(filters && filters.renewalSoon);
+  state.ui.filterStale = !!(filters && filters.stale);
   render();
 }
 
@@ -522,6 +595,7 @@ function render(){
       <div class="title-row">
         <h1>Warpath</h1>
         <div style="display:flex;gap:6px;">
+          <button class="btn ghost small" onclick="openSettingsModal()" style="padding:4px 8px;">Settings</button>
           <button class="btn ghost small" onclick="openBackupModal()" style="padding:4px 8px;">Backup</button>
           <button class="btn ghost small" onclick="signOut()" style="padding:4px 8px;">Log out</button>
         </div>
@@ -538,6 +612,7 @@ function render(){
       ${tabBtn('tasks','Tasks')}
     </nav>
     <div id="content">${tabContent()}</div>
+    <button class="fab-capture" onclick="openQuickCapture()" title="Quick capture" aria-label="Quick capture">+</button>
     ${modalHTML()}
   `;
   if(state.ui.tab==='accounts'){
@@ -552,6 +627,9 @@ function render(){
   }
   if(state.ui.tab==='csms'){
     renderCsmRequests();
+  }
+  if(state.ui.tab==='territory' && state.ui.routeSelection.length){
+    renderTripNights();
   }
   const focused = document.querySelector('[data-autofocus]');
   if(focused) focused.focus();
@@ -578,6 +656,51 @@ function focusScore(a){
   if(d!==null) score += Math.max(0, 90-d);
   return score;
 }
+function jumpToAccount(id){
+  state.ui.tab='accounts'; state.ui.search='';
+  state.ui.filterStates=[]; state.ui.filterStatuses=[];
+  state.ui.filterRenewalSoon=false; state.ui.filterStale=false;
+  state.ui.expanded=id;
+  render();
+}
+function rightNowItems(){
+  const items = [];
+  state.data.tasks.filter(t=>!t.done && daysUntil(t.dueDate)!==null && daysUntil(t.dueDate)<0).forEach(t=>{
+    const days = Math.abs(daysUntil(t.dueDate));
+    items.push({ score: 1000+days, icon:'⏰', label: t.title, sub: `${days} day${days===1?'':'s'} overdue`, type:'task' });
+  });
+  state.data.csmRequests.filter(r=>r.status==='Open' && r.followUpDate && daysUntil(r.followUpDate)<=0).forEach(r=>{
+    const acc = getAccount(r.accountId);
+    const days = Math.abs(daysUntil(r.followUpDate));
+    items.push({ score: 900+days, icon:'📞', label: `Follow up with ${csmName(r.csmId)}`, sub: (acc?acc.name+' · ':'')+`${days} day${days===1?'':'s'} overdue`, type:'csm' });
+  });
+  state.data.tasks.filter(t=>!t.done && daysUntil(t.dueDate)===0).forEach(t=>{
+    items.push({ score: 800, icon:'✅', label: t.title, sub: 'Due today', type:'task' });
+  });
+  state.data.accounts.forEach(a=>{
+    if(isStale(a)){
+      const d = daysUntil(a.renewalDate);
+      const urgent = a.status==='At Risk' || (d!==null && d>=0 && d<=30);
+      items.push({ score: urgent?700:500, icon:'📵', label: a.name, sub: `No contact ${STALE_DAYS}+ days`+(urgent?' · needs attention':''), type:'account', id:a.id });
+    }
+  });
+  state.data.accounts.forEach(a=>{
+    const d = daysUntil(a.renewalDate);
+    if(d!==null && d>=0 && d<=180 && (a.status==='Healthy' || a.status==='Opportunity')){
+      items.push({ score:600, icon:'📄', label:a.name, sub:`Renews ${monthsLabel(a.renewalDate)} — past the 6-month mark, conversation not started`, type:'account', id:a.id });
+    }
+  });
+  return items.sort((a,b)=>b.score-a.score).slice(0,5);
+}
+function rightNowRow(item){
+  const onclick = item.type==='task' ? "setTab('tasks')" : item.type==='csm' ? "setTab('csms')" : `jumpToAccount('${item.id}')`;
+  return `<div class="frow" onclick="${onclick}">
+    <div class="fmain">
+      <div class="fname">${item.icon} ${esc(item.label)}</div>
+      <div class="fmeta">${esc(item.sub)}</div>
+    </div>
+  </div>`;
+}
 function overviewHTML(){
   const accs = state.data.accounts;
   const renew30 = accs.filter(a=> { const d=daysUntil(a.renewalDate); return d!==null && d>=0 && d<=30; }).length;
@@ -585,6 +708,8 @@ function overviewHTML(){
   const tasksDue = state.data.tasks.filter(t=>!t.done && daysUntil(t.dueDate)!==null && daysUntil(t.dueDate)<=0).length;
   const needsSF = state.data.tasks.filter(t=>t.done && !t.loggedToSF).length;
   const csmFollowUps = state.data.csmRequests.filter(r=>r.status==='Open' && r.followUpDate && daysUntil(r.followUpDate)<=0).length;
+  const staleCount = accs.filter(a=>isStale(a)).length;
+  const rightNow = rightNowItems();
 
   const focus = [...accs].sort((a,b)=>focusScore(b)-focusScore(a)).slice(0,5);
   const visits = accs.filter(a=>a.nextVisit).sort((a,b)=> a.nextVisit.localeCompare(b.nextVisit)).slice(0,5);
@@ -599,6 +724,12 @@ function overviewHTML(){
       <div class="stat ${tasksDue>0?'flag-red':''}" style="cursor:pointer;" onclick="setTab('tasks')"><div class="num">${tasksDue}</div><div class="lbl">Tasks due / overdue</div></div>
       <div class="stat ${needsSF>0?'flag-amber':''}" style="cursor:pointer;" onclick="setTab('tasks')"><div class="num">${needsSF}</div><div class="lbl">Completed, not yet in Salesforce</div></div>
       <div class="stat ${csmFollowUps>0?'flag-amber':''}" style="cursor:pointer;" onclick="setTab('csms')"><div class="num">${csmFollowUps}</div><div class="lbl">CSM follow-ups due</div></div>
+      <div class="stat ${staleCount>0?'flag-amber':''}" style="cursor:pointer;" onclick="goToAccounts({stale:true})"><div class="num">${staleCount}</div><div class="lbl">No contact ${STALE_DAYS}+ days</div></div>
+    </div>
+
+    <div class="section-title">Right now</div>
+    <div class="flist" style="margin-bottom:6px;">
+      ${rightNow.length ? rightNow.map(item=>rightNowRow(item)).join('') : `<div class="empty">Nothing urgent right now — nice.</div>`}
     </div>
 
     <div class="section-title">Today's focus</div>
@@ -657,12 +788,13 @@ function visitMiniRow(a){
 function accountsHTML(){
   return `
     ${state.ui.filterRenewalSoon ? `<div class="filter-bar"><span class="chip on" onclick="state.ui.filterRenewalSoon=false;renderAccountsList();">Renewals ≤30 days ✕</span></div>` : ''}
+    ${state.ui.filterStale ? `<div class="filter-bar"><span class="chip on" onclick="state.ui.filterStale=false;renderAccountsList();">No contact ${STALE_DAYS}+ days ✕</span></div>` : ''}
     <input id="searchInput" placeholder="Search accounts by name or city…" value="${esc(state.ui.search)}" data-autofocus />
     <div class="filter-bar">
-      ${['All',...STATES].map(s=>`<button class="chip ${state.ui.filterState===s?'on':''}" onclick="setFilter('filterState','${s}')">${s}</button>`).join('')}
+      ${['All',...STATES].map(s=>`<button class="chip ${s==='All'? (state.ui.filterStates.length===0?'on':'') : (state.ui.filterStates.includes(s)?'on':'')}" onclick="toggleStateFilter('${s}')">${s}</button>`).join('')}
     </div>
     <div class="filter-bar">
-      ${['All',...STATUSES].map(s=>`<button class="chip ${state.ui.filterStatus===s?'on':''}" onclick="setFilter('filterStatus','${s}')">${s}</button>`).join('')}
+      ${['All',...STATUSES].map(s=>`<button class="chip ${s==='All'? (state.ui.filterStatuses.length===0?'on':'') : (state.ui.filterStatuses.includes(s)?'on':'')}" onclick="toggleStatusFilter('${s}')">${s}</button>`).join('')}
     </div>
     <button class="btn primary fab-add" style="margin-top:12px;" onclick="openAccountModal('new')">+ Add account</button>
     <div style="display:flex;gap:6px;margin-top:8px;">
@@ -676,13 +808,29 @@ function onSearchInput(e){
   state.ui.search = e.target.value;
   renderAccountsList();
 }
-function setFilter(key,val){ state.ui[key]=val; renderAccountsList(); }
+function toggleStateFilter(s){
+  if(s==='All'){ state.ui.filterStates = []; }
+  else {
+    const i = state.ui.filterStates.indexOf(s);
+    if(i>=0) state.ui.filterStates.splice(i,1); else state.ui.filterStates.push(s);
+  }
+  renderAccountsList();
+}
+function toggleStatusFilter(s){
+  if(s==='All'){ state.ui.filterStatuses = []; }
+  else {
+    const i = state.ui.filterStatuses.indexOf(s);
+    if(i>=0) state.ui.filterStatuses.splice(i,1); else state.ui.filterStatuses.push(s);
+  }
+  renderAccountsList();
+}
 function filteredAccounts(){
   const q = state.ui.search.trim().toLowerCase();
   return state.data.accounts.filter(a=>{
-    if(state.ui.filterState!=='All' && a.state!==state.ui.filterState) return false;
-    if(state.ui.filterStatus!=='All' && a.status!==state.ui.filterStatus) return false;
+    if(state.ui.filterStates.length && !state.ui.filterStates.includes(a.state)) return false;
+    if(state.ui.filterStatuses.length && !state.ui.filterStatuses.includes(a.status)) return false;
     if(state.ui.filterRenewalSoon){ const d=daysUntil(a.renewalDate); if(!(d!==null && d>=0 && d<=30)) return false; }
+    if(state.ui.filterStale && !isStale(a)) return false;
     if(q && !(a.name.toLowerCase().includes(q) || a.city.toLowerCase().includes(q))) return false;
     return true;
   }).sort((a,b)=>focusScore(b)-focusScore(a));
@@ -830,10 +978,13 @@ function planningSummaryHTML(a){
 function accountCard(a){
   const d = daysUntil(a.renewalDate);
   const products = a.products || [];
-  const lastVisit = lastVisitDate(a);
+  const lastAct = lastActivity(a);
   const visitCount = (a.visitLog||[]).length;
   const mktCount = (a.marketing||[]).length;
   const lastMkt = mktCount ? [...a.marketing].sort((x,y)=>y.date.localeCompare(x.date))[0] : null;
+  const children = childAccounts(a.id);
+  const parent = parentAccount(a);
+  const stale = isStale(a);
   return `<div class="acct-card">
     <div class="acct-top" onclick="toggleExpand('${a.id}')" style="cursor:pointer;">
       <div>
@@ -842,6 +993,9 @@ function accountCard(a){
         <div class="acct-badges">
           <span class="badge ${statusClass(a.status)}">${a.status}</span>
           <span class="badge priority-${a.priority}">${a.priority} priority</span>
+          ${stale ? `<span class="badge At-Risk">No contact ${STALE_DAYS}+ days</span>` : ''}
+          ${children.length ? `<span class="badge vendor-CDK">Group · ${children.length} store${children.length===1?'':'s'}</span>` : ''}
+          ${parent ? `<span class="badge priority-Medium">Part of ${esc(parent.name)}</span>` : ''}
           ${products.map(p=>productBadge(p)).join('')}
         </div>
       </div>
@@ -849,16 +1003,34 @@ function accountCard(a){
     ${state.ui.expanded===a.id ? `
       <div class="acct-details">
         <div>CSM: ${esc(csmName(a.csmId))}</div>
-        <div>Renewal: ${niceDate(a.renewalDate)} ${d!==null? '('+monthsLabel(a.renewalDate)+')':''}</div>
-        <div>Last visit: ${lastVisit? niceDate(lastVisit) : '—'} ${visitCount? `(${visitCount} visit${visitCount===1?'':'s'} logged)`:''}</div>
+        ${parent ? `<div>Group: <a class="linklike" onclick="event.stopPropagation();state.ui.expanded='${parent.id}';setTab('accounts');">${esc(parent.name)}</a></div>` : ''}
+        <div>Renewal: ${a.renewalDate ? niceDate(a.renewalDate) + (d!==null? ' ('+monthsLabel(a.renewalDate)+')':'') : '—'}</div>
+        <div>Last activity: ${lastAct? niceDate(lastAct.date)+' · '+esc(lastAct.type||'Visit') : '—'} ${visitCount? `(${visitCount} logged)`:''}</div>
         <div>Next visit: ${niceDate(a.nextVisit)}</div>
         ${lastMkt ? `<div>Last marketing sent: ${esc(lastMkt.item)} · ${niceDate(lastMkt.date)}</div>` : ''}
         ${a.notes? `<div style="margin-top:4px;">${esc(a.notes)}</div>`:''}
       </div>
+      ${children.length ? `
+        <div class="acct-details" style="margin-top:8px;">
+          <div style="font-weight:600;font-size:12.5px;margin-bottom:4px;">Stores in this group</div>
+          ${children.map(c=>`<div>
+            <a class="linklike" onclick="event.stopPropagation();state.ui.expanded='${c.id}';setTab('accounts');">${esc(c.name)}</a>
+            — <span class="badge ${statusClass(c.status)}">${c.status}</span>
+            ${c.renewalDate ? ' · renews '+monthsLabel(c.renewalDate) : ''}
+          </div>`).join('')}
+        </div>
+      ` : ''}
       ${planningSummaryHTML(a)}
+      ${undiscussedInitiatives(a).length ? `
+        <div class="tip-box" style="background:var(--gold-bg);">
+          <b style="color:var(--gold);">Talk about next</b>
+          ${undiscussedInitiatives(a).map(i=>`<div>• ${esc(i.title)}</div>`).join('')}
+        </div>
+      ` : ''}
       <div class="tip-box"><b>Engagement ideas · ${a.status}</b>${TIPS[a.status][0]}</div>
       <div class="acct-actions">
         <a class="btn small" href="${mapsSingleUrl(a)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">Directions</a>
+        <button class="btn small" onclick="event.stopPropagation();copyAccountSummary('${a.id}')">Copy summary</button>
         <button class="btn small" onclick="event.stopPropagation();openAccountModal('${a.id}')">Edit</button>
         <button class="btn small danger" onclick="event.stopPropagation();confirmDelete('account','${a.id}')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id===a.id ? 'Tap again to delete':'Delete'}</button>
       </div>
@@ -868,6 +1040,64 @@ function accountCard(a){
 function toggleExpand(id){
   state.ui.expanded = state.ui.expanded===id ? null : id;
   renderAccountsList();
+}
+
+function buildAccountSummary(a){
+  const d = daysUntil(a.renewalDate);
+  const lastAct = lastActivity(a);
+  const lines = [];
+  lines.push(`${a.name} — ${a.city}, ${a.state}`);
+  lines.push(`Status: ${a.status} (${a.priority} priority) · CSM: ${csmName(a.csmId)}`);
+  lines.push(`Renewal: ${a.renewalDate ? niceDate(a.renewalDate) + (d!==null?' ('+monthsLabel(a.renewalDate)+')':'') : 'Not set'}`);
+  lines.push('');
+  if((a.products||[]).length){
+    lines.push('Products:');
+    a.products.forEach(p=> lines.push(`- ${p.category}: ${p.name} (${p.vendor==='CDK'?'Ours':'Competitor'})`));
+    lines.push('');
+  }
+  lines.push(`Last activity: ${lastAct ? niceDate(lastAct.date)+' ('+(lastAct.type||'Visit')+')'+(lastAct.notes?' — '+lastAct.notes:'') : 'None logged'}`);
+  lines.push(`Next visit: ${niceDate(a.nextVisit)}`);
+  if(a.notes){ lines.push(''); lines.push(`Notes: ${a.notes}`); }
+  const planned = a.planning ? DEPARTMENTS.filter(dep=>a.planning[dep] && (a.planning[dep].strengths||a.planning[dep].weaknesses)) : [];
+  if(planned.length){
+    lines.push('');
+    lines.push('Account planning:');
+    planned.forEach(dep=>{
+      const p = a.planning[dep];
+      const parts = [];
+      if(p.strengths) parts.push('Strengths: '+p.strengths);
+      if(p.weaknesses) parts.push('Weaknesses: '+p.weaknesses);
+      lines.push(`${dep} — ${parts.join(' | ')}`);
+    });
+  }
+  const undiscussed = undiscussedInitiatives(a);
+  if(undiscussed.length){
+    lines.push('');
+    lines.push('Talk about next: ' + undiscussed.map(i=>i.title).join(', '));
+  }
+  return lines.join('\n');
+}
+async function copyAccountSummary(id){
+  const a = getAccount(id);
+  const text = buildAccountSummary(a);
+  try{
+    await navigator.clipboard.writeText(text);
+    setSaveStatus('Summary copied');
+    setTimeout(()=>setSaveStatus('Synced'), 1500);
+  }catch(e){
+    state.ui.modal = { type:'copySummary', text };
+    render();
+  }
+}
+function copySummaryModal(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>Copy this</h2>
+      <p style="font-size:12.5px;color:var(--muted-2);margin-top:0;">Couldn't copy automatically — select all the text below and copy it manually.</p>
+      <textarea rows="14" style="font-size:12.5px;" onclick="this.select()">${esc(state.ui.modal.text)}</textarea>
+    </div>
+  </div>`;
 }
 
 /* ================= TERRITORY ================= */
@@ -881,14 +1111,23 @@ function territoryHTML(){
 
   const sel = state.ui.routeSelection;
   const selAccounts = sel.map(id=>getAccount(id)).filter(Boolean);
+  const spanStates = new Set(selAccounts.map(a=>a.state)).size;
   const routeBar = sel.length ? `
-    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px;position:sticky;top:112px;z-index:10;">
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;position:sticky;top:112px;z-index:10;">
       <div style="font-size:13px;font-weight:600;">${sel.length} stop${sel.length===1?'':'s'} selected for a route</div>
       <div style="display:flex;gap:6px;">
         <a class="btn amber small" href="${mapsRouteUrl(selAccounts)}" target="_blank" rel="noopener">Open in Google Maps</a>
         <button class="btn ghost small" onclick="state.ui.routeSelection=[];render();">Clear</button>
       </div>
     </div>
+    ${spanStates>1 ? `<p style="font-size:12.5px;color:var(--amber-deep);margin:0 0 14px;">This route crosses ${spanStates} states — probably too far for a day trip from ${esc(state.data.settings.homeBase||'home')}. Plan an overnight below.</p>` : ''}
+    ${nearbySuggestionsHTML(selAccounts)}
+    <div class="section-title">Plan the nights</div>
+    <div class="row2">
+      <div class="field"><label>First night</label><input type="date" id="trip_start" value="${state.ui.tripStart||''}" onchange="setTripStart(this.value)" /></div>
+      <div class="field"><label>Nights</label><input type="number" min="1" max="14" id="trip_nights" value="${state.ui.tripNights||1}" onchange="setTripNights(this.value)" /></div>
+    </div>
+    <div id="tripNightsContainer" style="margin-bottom:16px;"></div>
   ` : `<p style="font-size:12.5px;color:var(--muted-2);margin-top:0;">Check off a few stops below to build a driving route — it opens in real Google Maps with real drive times, free, no account needed.</p>`;
 
   return routeBar + groups.map(g => `
@@ -897,6 +1136,33 @@ function territoryHTML(){
       ${g.list.map(a=>visitRow(a)).join('')}
     </div>
   `).join('') || `<div class="empty">Add accounts first to plan your territory visits.</div>`;
+}
+function nearbySuggestionsHTML(selAccounts){
+  if(!selAccounts.length) return '';
+  const selIds = new Set(selAccounts.map(a=>a.id));
+  const selCities = new Set(selAccounts.map(a=>a.city.toLowerCase()));
+  const selStates = new Set(selAccounts.map(a=>a.state));
+  const candidates = state.data.accounts.filter(a=>{
+    if(selIds.has(a.id)) return false;
+    return selCities.has(a.city.toLowerCase()) || selStates.has(a.state);
+  }).map(a=>({ a, sameCity: selCities.has(a.city.toLowerCase()) }))
+    .sort((x,y)=> (y.sameCity - x.sameCity))
+    .slice(0,8);
+  if(!candidates.length) return '';
+  return `
+    <div class="section-title">On the way — worth adding?</div>
+    <div class="flist" style="margin-bottom:10px;">
+      ${candidates.map(({a,sameCity})=>`
+        <div class="frow">
+          <div class="fmain">
+            <div class="fname">${esc(a.name)}</div>
+            <div class="fmeta">${a.city}, ${a.state} · ${sameCity?'same city':'same state'}</div>
+          </div>
+          <button class="btn small" onclick="toggleRouteSelection('${a.id}')">+ Add</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 function toggleRouteSelection(id){
   const i = state.ui.routeSelection.indexOf(id);
@@ -917,7 +1183,7 @@ function visitRow(a){
       </div>
       ${!a.nextVisit? `<span class="unscheduled">Not scheduled</span>` : `<span style="font-size:11.5px;color:#5B6B62;">${daysLabel(a.nextVisit)}</span>`}
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-top:8px;">Last visit: ${lastVisit? niceDate(lastVisit) : 'none logged'}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px;">Last contact: ${lastVisit? niceDate(lastVisit) : 'none logged'}</div>
     <div class="field" style="margin-top:6px;">
       <label>Next visit (reschedule freely — nothing is lost)</label>
       <input type="date" value="${a.nextVisit||''}" onchange="updateVisitDate('${a.id}','nextVisit',this.value)" />
@@ -936,9 +1202,54 @@ function updateVisitDate(id,field,val){
 function logVisitToday(id){
   const a = getAccount(id);
   a.visitLog = a.visitLog || [];
-  a.visitLog.push({ id: uid(), date: fmtDate(today()), notes:'', loggedMileage:false });
+  a.visitLog.push({ id: uid(), date: fmtDate(today()), type:'Visit', notes:'', loggedMileage:false });
   save();
   openAccountModal(id);
+}
+
+function setTripStart(val){ state.ui.tripStart = val || null; renderTripNights(); }
+function setTripNights(val){ state.ui.tripNights = Math.max(1, Math.min(14, parseInt(val,10)||1)); renderTripNights(); }
+function tripNightDates(){
+  if(!state.ui.tripStart) return [];
+  const n = state.ui.tripNights || 1;
+  const out = [];
+  for(let i=0;i<n;i++){ out.push(fmtDate(addDays(parseLocal(state.ui.tripStart), i))); }
+  return out;
+}
+function renderTripNights(){
+  const c = document.getElementById('tripNightsContainer');
+  if(!c) return;
+  const dates = tripNightDates();
+  if(!dates.length){ c.innerHTML = `<div class="empty" style="padding:4px 0;">Pick a first night to see how it lines up with his schedule.</div>`; return; }
+  c.innerHTML = dates.map(dateStr=>{
+    const d = parseLocal(dateStr);
+    const dow = WEEKDAYS[d.getDay()];
+    const ns = nightStatus(dateStr);
+    return `<div class="visit-row" style="margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:600;font-size:13.5px;">${dow}, ${niceDate(dateStr)}</div>
+          ${ns.note ? `<div style="font-size:12px;color:var(--muted);margin-top:1px;">${esc(ns.note)}</div>` : ''}
+        </div>
+        ${nightBadge(dateStr)}
+      </div>
+      ${ns.status==='work' ? `
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn small" onclick="quickOverride('${dateStr}','sitter')">Got a sitter</button>
+          <button class="btn small" onclick="quickOverride('${dateStr}','off')">He's actually off</button>
+        </div>
+      ` : ns.override ? `
+        <button class="btn ghost small" style="margin-top:6px;" onclick="removeOverride('${dateStr}');renderTripNights();">Remove override</button>
+      ` : ''}
+    </div>`;
+  }).join('');
+}
+function quickOverride(dateStr, type){
+  const existing = state.data.boyfriendSchedule.overrides.find(o=>o.date===dateStr);
+  if(existing){ existing.type = type; }
+  else { state.data.boyfriendSchedule.overrides.push({ date: dateStr, type, note:'' }); }
+  save();
+  renderTripNights();
 }
 
 /* ================= PRODUCTS REPORT ================= */
@@ -1175,9 +1486,9 @@ function tasksHTML(){
   const doneAll = state.data.tasks.filter(t=>t.done).sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||''));
   const needsLog = doneAll.filter(t=>!t.loggedToSF);
   const logged = doneAll.filter(t=>t.loggedToSF);
-  const overdue = open.filter(t=>daysUntil(t.dueDate)<0).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
-  const soon = open.filter(t=>daysUntil(t.dueDate)>=0 && daysUntil(t.dueDate)<=7).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
-  const later = open.filter(t=>daysUntil(t.dueDate)>7 || t.dueDate==null).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+  const overdue = open.filter(t=>daysUntil(t.dueDate)!==null && daysUntil(t.dueDate)<0).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const soon = open.filter(t=>daysUntil(t.dueDate)!==null && daysUntil(t.dueDate)>=0 && daysUntil(t.dueDate)<=7).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const later = open.filter(t=>t.dueDate==null || daysUntil(t.dueDate)>7).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
 
   return `
     <button class="btn primary fab-add" onclick="openTaskModal('new')">+ Add task</button>
@@ -1219,15 +1530,29 @@ function taskRow(t){
       <input type="checkbox" style="width:14px;height:14px;accent-color:var(--amber-deep);" ${t.loggedToSF?'checked':''} onchange="toggleLoggedSF('${t.id}')" />
       Logged to Salesforce
     </label>` : '';
+  const snoozeRow = overdue ? `
+    <div style="display:flex;gap:5px;margin-top:6px;" onclick="event.stopPropagation();">
+      <button class="btn ghost small" onclick="snoozeTask('${t.id}',1)">Snooze 1 day</button>
+      <button class="btn ghost small" onclick="snoozeTask('${t.id}',3)">3 days</button>
+      <button class="btn ghost small" onclick="snoozeTask('${t.id}',7)">1 week</button>
+    </div>` : '';
   return `<div class="task-row ${t.done?'done':''}">
     <input type="checkbox" ${t.done?'checked':''} onchange="toggleTask('${t.id}')" />
     <div class="task-main" onclick="openTaskModal('${t.id}')">
       <div class="task-title">${esc(t.title)}</div>
       <div class="task-meta ${overdue?'overdue':''}">${meta}</div>
       ${sfToggle}
+      ${snoozeRow}
     </div>
     <button class="btn ghost small" onclick="confirmDelete('task','${t.id}')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id===t.id ? 'Confirm?':'✕'}</button>
   </div>`;
+}
+function snoozeTask(id, days){
+  const t = state.data.tasks.find(x=>x.id===id);
+  if(!t) return;
+  t.dueDate = fmtDate(addDays(today(), days));
+  save();
+  render();
 }
 function toggleTask(id){
   const t = state.data.tasks.find(x=>x.id===id);
@@ -1245,7 +1570,10 @@ function toggleLoggedSF(id){
 /* ================= DELETE CONFIRM (no native dialogs) ================= */
 function confirmDelete(type,id){
   if(state.ui.deleteConfirm && state.ui.deleteConfirm.type===type && state.ui.deleteConfirm.id===id){
-    if(type==='account') state.data.accounts = state.data.accounts.filter(a=>a.id!==id);
+    if(type==='account'){
+      state.data.accounts.forEach(a=>{ if(a.parentGroupId===id) a.parentGroupId=null; });
+      state.data.accounts = state.data.accounts.filter(a=>a.id!==id);
+    }
     if(type==='task') state.data.tasks = state.data.tasks.filter(t=>t.id!==id);
     if(type==='clearCompleted') state.data.tasks = state.data.tasks.filter(t=>!t.done);
     if(type==='csm'){
@@ -1276,9 +1604,142 @@ function modalHTML(){
   if(state.ui.modal.type==='csm') return csmModal();
   if(state.ui.modal.type==='csmRequest') return csmRequestModal();
   if(state.ui.modal.type==='csvImport') return csvImportModal();
+  if(state.ui.modal.type==='settings') return settingsModal();
+  if(state.ui.modal.type==='copySummary') return copySummaryModal();
+  if(state.ui.modal.type==='quickCapture') return quickCaptureModal();
   return '';
 }
+function openSettingsModal(){ state.ui.modal = {type:'settings'}; render(); }
+function settingsModal(){
+  const sched = state.data.boyfriendSchedule;
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>Settings</h2>
+
+      <div class="section-title">Home base</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Used as the start and end point when you build a route in Territory.</p>
+      <div class="field"><input id="set_homebase" value="${esc(state.data.settings.homeBase||'')}" placeholder="105 Oriole Lane, La Plata, MD" /></div>
+      <button type="button" class="btn small" onclick="saveHomeBase()">Save home base</button>
+
+      <div class="section-title" style="margin-top:20px;">His regular work nights</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Check the nights he usually works — trip planning will flag overnights on these unless you add an override.</p>
+      <div class="filter-bar">
+        ${WEEKDAYS.map(d=>`<button class="chip ${sched.workDays.includes(d)?'on':''}" onclick="toggleWorkDay('${d}')">${d}</button>`).join('')}
+      </div>
+
+      <div class="section-title" style="margin-top:20px;">Overrides for specific nights</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Use this when a normal work night won't be a problem — sitter lined up, or his schedule changed that week.</p>
+      <div id="overridesListEditor">${overridesListHTML()}</div>
+      <div class="row2" style="margin-top:6px;">
+        <div class="field"><label>Date</label><input type="date" id="ov_date" /></div>
+        <div class="field"><label>Reason</label><select id="ov_type"><option value="sitter">Sitter arranged</option><option value="off">He's actually off</option></select></div>
+      </div>
+      <div class="field"><label>Note (optional)</label><input id="ov_note" placeholder="e.g. Mom's watching the kids" /></div>
+      <button type="button" class="btn small" onclick="addOverride()">+ Add override</button>
+
+      <div class="section-title" style="margin-top:20px;">Initiatives</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Things you want to bring up across your book — new products, campaigns, pushes. Each account tracks which of these it's already heard about.</p>
+      <div id="initiativesListEditor">${initiativesListHTML()}</div>
+      <div class="field" style="margin-top:6px;"><label>Title</label><input id="init_title" placeholder="e.g. Service Marketing launch" /></div>
+      <div class="field"><label>Description (optional)</label><input id="init_desc" placeholder="Short reminder of what it is" /></div>
+      <button type="button" class="btn small" onclick="addInitiative()">+ Add initiative</button>
+    </div>
+  </div>`;
+}
+function saveHomeBase(){
+  state.data.settings.homeBase = document.getElementById('set_homebase').value.trim();
+  save();
+}
+function toggleWorkDay(d){
+  const arr = state.data.boyfriendSchedule.workDays;
+  const i = arr.indexOf(d);
+  if(i>=0) arr.splice(i,1); else arr.push(d);
+  save();
+  render();
+}
+function overridesListHTML(){
+  const list = [...state.data.boyfriendSchedule.overrides].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!list.length) return `<div class="empty" style="padding:4px 0;">No overrides yet.</div>`;
+  return list.map(o=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft);">
+      <div style="font-size:13px;">${niceDate(o.date)} — ${o.type==='sitter'?'Sitter arranged':"He's off"}${o.note? ' · '+esc(o.note):''}</div>
+      <button type="button" class="btn ghost small" onclick="removeOverride('${o.date}')">✕</button>
+    </div>
+  `).join('');
+}
+function addOverride(){
+  const date = document.getElementById('ov_date').value;
+  const type = document.getElementById('ov_type').value;
+  const note = document.getElementById('ov_note').value.trim();
+  if(!date) return;
+  const existing = state.data.boyfriendSchedule.overrides.find(o=>o.date===date);
+  if(existing){ existing.type=type; existing.note=note; }
+  else state.data.boyfriendSchedule.overrides.push({ date, type, note });
+  save();
+  document.getElementById('overridesListEditor').innerHTML = overridesListHTML();
+  renderTripNights();
+}
+function removeOverride(date){
+  state.data.boyfriendSchedule.overrides = state.data.boyfriendSchedule.overrides.filter(o=>o.date!==date);
+  save();
+  document.getElementById('overridesListEditor').innerHTML = overridesListHTML();
+  renderTripNights();
+}
+
+function initiativesListHTML(){
+  if(!state.data.initiatives.length) return `<div class="empty" style="padding:4px 0;">No initiatives yet.</div>`;
+  return state.data.initiatives.map(i=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft);">
+      <div><div style="font-weight:600;font-size:13px;">${esc(i.title)}</div>${i.description?`<div style="font-size:12px;color:var(--muted);">${esc(i.description)}</div>`:''}</div>
+      <button type="button" class="btn ghost small" onclick="removeInitiative('${i.id}')">✕</button>
+    </div>
+  `).join('');
+}
+function addInitiative(){
+  const title = document.getElementById('init_title').value.trim();
+  const description = document.getElementById('init_desc').value.trim();
+  if(!title) return;
+  state.data.initiatives.push({ id: uid(), title, description });
+  save();
+  document.getElementById('init_title').value=''; document.getElementById('init_desc').value='';
+  document.getElementById('initiativesListEditor').innerHTML = initiativesListHTML();
+}
+function removeInitiative(id){
+  state.data.initiatives = state.data.initiatives.filter(i=>i.id!==id);
+  state.data.accounts.forEach(a=>{ a.initiativesDiscussed = (a.initiativesDiscussed||[]).filter(e=>e.initiativeId!==id); });
+  save();
+  document.getElementById('initiativesListEditor').innerHTML = initiativesListHTML();
+}
+function undiscussedInitiatives(a){
+  const discussedIds = new Set((a.initiativesDiscussed||[]).map(e=>e.initiativeId));
+  return state.data.initiatives.filter(i=>!discussedIds.has(i.id));
+}
+
+function openQuickCapture(){ state.ui.modal = {type:'quickCapture'}; render(); }
+function quickCaptureModal(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>Quick capture</h2>
+      <p style="font-size:12.5px;color:var(--muted-2);margin-top:0;">Just get it down — sort, date, or link it to an account later from Tasks.</p>
+      <div class="field"><textarea id="qc_text" rows="3" placeholder="What's on your mind…" data-autofocus></textarea></div>
+      <button class="btn primary fab-add" onclick="saveQuickCapture()">Capture</button>
+    </div>
+  </div>`;
+}
+function saveQuickCapture(){
+  const text = document.getElementById('qc_text').value.trim();
+  if(!text) return;
+  state.data.tasks.push({ id: uid(), title: text, accountId: null, dueDate: null, priority: 'Medium', done:false, loggedToSF:false });
+  save();
+  state.ui.modal = null;
+  render();
+}
+
 function openBackupModal(){ state.ui.modal = {type:'backup'}; state.ui.backupError=null; render(); }
+
+
 function backupModal(){
   return `<div class="overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
@@ -1313,12 +1774,14 @@ function backupModal(){
 let editingProducts = [];
 let editingVisits = [];
 let editingMarketing = [];
+let editingInitiatives = [];
 function accountModal(){
   const isNew = state.ui.modal.id==='new';
-  const a = isNew ? { name:'',city:'',state:'MD',address:'',status:'Healthy',priority:'Medium',renewalDate:'',nextVisit:'',notes:'',products:[],visitLog:[],marketing:[],csmId:null,planning:{} } : getAccount(state.ui.modal.id);
+  const a = isNew ? { id:null, name:'',city:'',state:'MD',address:'',status:'Healthy',priority:'Medium',renewalDate:'',nextVisit:'',notes:'',products:[],visitLog:[],marketing:[],csmId:null,planning:{},parentGroupId:null,initiativesDiscussed:[] } : getAccount(state.ui.modal.id);
   editingProducts = (a.products || []).map(p=>({...p}));
   editingVisits = (a.visitLog || []).map(v=>({...v}));
   editingMarketing = (a.marketing || []).map(m=>({...m}));
+  editingInitiatives = (a.initiativesDiscussed || []).map(e=>({...e}));
   return `<div class="overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
@@ -1332,6 +1795,9 @@ function accountModal(){
       <div class="field"><label>CSM assigned</label>
         <select id="f_csm"><option value="">— Unassigned —</option>${state.data.csms.map(c=>`<option value="${c.id}" ${a.csmId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
       </div>
+      <div class="field"><label>Part of a dealer group?</label>
+        <select id="f_parentGroup"><option value="">— Standalone account —</option>${state.data.accounts.filter(x=>x.id!==a.id).map(x=>`<option value="${x.id}" ${a.parentGroupId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+      </div>
       <div class="row2">
         <div class="field"><label>Status</label><select id="f_status">${STATUSES.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>Priority</label><select id="f_priority">${PRIORITIES.map(p=>`<option ${a.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
@@ -1342,45 +1808,73 @@ function accountModal(){
       </div>
       <div class="field"><label>Notes / engagement plan</label><textarea id="f_notes" rows="3">${esc(a.notes)}</textarea></div>
 
-      <div class="section-title">Account planning</div>
-      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Strengths and weaknesses by department — use this to prep for reviews and find the next opening.</p>
-      ${DEPARTMENTS.map(dept => `
-        <div style="font-size:13px;font-weight:600;margin:12px 0 6px;">${dept}</div>
-        <div class="field"><label>Strengths</label><textarea id="f_plan_${dept}_s" rows="2">${esc((a.planning && a.planning[dept] && a.planning[dept].strengths) || '')}</textarea></div>
-        <div class="field"><label>Weaknesses</label><textarea id="f_plan_${dept}_w" rows="2">${esc((a.planning && a.planning[dept] && a.planning[dept].weaknesses) || '')}</textarea></div>
-      `).join('')}
-
-      <div class="section-title">Products they have</div>
-      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Log their DMS, CRM, Service, and anything else worth tracking — ours or a competitor's.</p>
-      <div id="productsListEditor">${productsListEditorHTML()}</div>
-      <div class="row2" style="margin-top:6px;">
-        <div class="field"><label>Category</label><select id="np_cat">${PRODUCT_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
-        <div class="field"><label>Vendor</label><select id="np_vendor">${VENDORS.map(v=>`<option>${v}</option>`).join('')}</select></div>
+      ${collapsibleHeader('planning', 'Account planning', DEPARTMENTS.filter(d=>a.planning&&a.planning[d]&&(a.planning[d].strengths||a.planning[d].weaknesses)).length || null)}
+      <div id="section-planning" style="display:none;">
+        <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Strengths and weaknesses by department — use this to prep for reviews and find the next opening.</p>
+        ${DEPARTMENTS.map(dept => `
+          <div style="font-size:13px;font-weight:600;margin:12px 0 6px;">${dept}</div>
+          <div class="field"><label>Strengths</label><textarea id="f_plan_${dept}_s" rows="2">${esc((a.planning && a.planning[dept] && a.planning[dept].strengths) || '')}</textarea></div>
+          <div class="field"><label>Weaknesses</label><textarea id="f_plan_${dept}_w" rows="2">${esc((a.planning && a.planning[dept] && a.planning[dept].weaknesses) || '')}</textarea></div>
+        `).join('')}
       </div>
-      <div class="field"><label>Product name</label><input id="np_name" placeholder="e.g. CDK CRM, VinSolutions, Xtime…" /></div>
-      <button type="button" class="btn small" onclick="addEditingProduct()">+ Add product</button>
 
-      <div class="section-title">Visit history</div>
-      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Every completed visit stays here permanently — use it to log mileage into your reimbursement app.</p>
-      <div id="visitsListEditor">${visitsListEditorHTML()}</div>
-      <div class="row2" style="margin-top:6px;">
-        <div class="field"><label>Date</label><input type="date" id="nv_date" value="${fmtDate(today())}" /></div>
+      ${collapsibleHeader('products', 'Products they have', editingProducts.length || null)}
+      <div id="section-products" style="display:none;">
+        <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Log their DMS, CRM, Service, and anything else worth tracking — ours or a competitor's.</p>
+        <div id="productsListEditor">${productsListEditorHTML()}</div>
+        <div class="row2" style="margin-top:6px;">
+          <div class="field"><label>Category</label><select id="np_cat">${PRODUCT_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+          <div class="field"><label>Vendor</label><select id="np_vendor">${VENDORS.map(v=>`<option>${v}</option>`).join('')}</select></div>
+        </div>
+        <div class="field"><label>Product name</label><input id="np_name" placeholder="e.g. CDK CRM, VinSolutions, Xtime…" /></div>
+        <button type="button" class="btn small" onclick="addEditingProduct()">+ Add product</button>
       </div>
-      <div class="field"><label>Notes</label><input id="nv_notes" placeholder="What happened on this visit…" /></div>
-      <button type="button" class="btn small" onclick="addEditingVisit()">+ Add visit</button>
 
-      <div class="section-title">Marketing sent</div>
-      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Track what you've sent them — flyers, one-pagers, promos.</p>
-      <div id="marketingListEditor">${marketingListEditorHTML()}</div>
-      <div class="row2" style="margin-top:6px;">
-        <div class="field"><label>Date</label><input type="date" id="nm_date" value="${fmtDate(today())}" /></div>
-        <div class="field"><label>Item sent</label><input id="nm_item" placeholder="e.g. Q4 promo flyer" /></div>
+      ${collapsibleHeader('activity', 'Activity log', editingVisits.length || null)}
+      <div id="section-activity" style="display:none;">
+        <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Visits, calls, and emails — every entry stays here permanently. In-person visits can be marked for your mileage app.</p>
+        <div id="visitsListEditor">${visitsListEditorHTML()}</div>
+        <div class="row2" style="margin-top:6px;">
+          <div class="field"><label>Date</label><input type="date" id="nv_date" value="${fmtDate(today())}" /></div>
+          <div class="field"><label>Type</label><select id="nv_type"><option>Visit</option><option>Call</option><option>Email</option></select></div>
+        </div>
+        <div class="field"><label>Notes</label><input id="nv_notes" placeholder="What happened…" /></div>
+        <button type="button" class="btn small" onclick="addEditingVisit()">+ Add activity</button>
       </div>
-      <button type="button" class="btn small" onclick="addEditingMarketing()">+ Add marketing entry</button>
+
+      ${collapsibleHeader('marketing', 'Marketing sent', editingMarketing.length || null)}
+      <div id="section-marketing" style="display:none;">
+        <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Track what you've sent them — flyers, one-pagers, promos.</p>
+        <div id="marketingListEditor">${marketingListEditorHTML()}</div>
+        <div class="row2" style="margin-top:6px;">
+          <div class="field"><label>Date</label><input type="date" id="nm_date" value="${fmtDate(today())}" /></div>
+          <div class="field"><label>Item sent</label><input id="nm_item" placeholder="e.g. Q4 promo flyer" /></div>
+        </div>
+        <button type="button" class="btn small" onclick="addEditingMarketing()">+ Add marketing entry</button>
+      </div>
+
+      ${collapsibleHeader('talking', 'Talking points', undiscussedInitiatives(a).length ? undiscussedInitiatives(a).length+' to cover' : null)}
+      <div id="section-talking" style="display:none;">
+        <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Check off what you've already discussed with them — anything left unchecked shows up as a suggestion on their card.</p>
+        <div id="initiativesEditor">${initiativesEditorHTML()}</div>
+      </div>
 
       <button class="btn primary fab-add" style="margin-top:16px;" onclick="saveAccountForm('${isNew?'new':a.id}')">Save account</button>
     </div>
   </div>`;
+}
+function collapsibleHeader(id, title, countLabel){
+  return `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;" onclick="toggleSection('${id}')">
+    <span>${title}${countLabel? ` <span style="color:var(--muted-2);font-weight:400;">(${countLabel})</span>`:''}</span>
+    <span id="chevron-${id}" style="color:var(--muted-2);font-size:12px;">▸ tap to expand</span>
+  </div>`;
+}
+function toggleSection(id){
+  const el = document.getElementById('section-'+id);
+  const chev = document.getElementById('chevron-'+id);
+  const isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'block' : 'none';
+  if(chev) chev.textContent = isHidden ? '▾ tap to collapse' : '▸ tap to expand';
 }
 function productsListEditorHTML(){
   if(!editingProducts.length) return `<div class="empty" style="padding:4px 0;">No products logged yet.</div>`;
@@ -1401,29 +1895,32 @@ function addEditingProduct(){
   document.getElementById('productsListEditor').innerHTML = productsListEditorHTML();
 }
 function visitsListEditorHTML(){
-  if(!editingVisits.length) return `<div class="empty" style="padding:4px 0;">No visits logged yet.</div>`;
+  if(!editingVisits.length) return `<div class="empty" style="padding:4px 0;">No activity logged yet.</div>`;
   return [...editingVisits].sort((a,b)=>b.date.localeCompare(a.date)).map((v)=>{
     const i = editingVisits.indexOf(v);
     return `
     <div style="padding:7px 0;border-bottom:1px solid var(--line-soft);">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div>
-          <div style="font-weight:600;font-size:13px;">${niceDate(v.date)}</div>
+          <div style="font-weight:600;font-size:13px;">${niceDate(v.date)} · ${esc(v.type||'Visit')}</div>
           ${v.notes? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${esc(v.notes)}</div>`:''}
         </div>
         <button type="button" class="btn ghost small" onclick="removeEditingVisit(${i})">✕</button>
       </div>
-      <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin-top:5px;">
-        <input type="checkbox" style="width:14px;height:14px;accent-color:var(--amber-deep);" ${v.loggedMileage?'checked':''} onchange="toggleEditingVisitLogged(${i})" />
-        Logged in mileage app
-      </label>
+      ${(v.type||'Visit')==='Visit' ? `
+        <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin-top:5px;">
+          <input type="checkbox" style="width:14px;height:14px;accent-color:var(--amber-deep);" ${v.loggedMileage?'checked':''} onchange="toggleEditingVisitLogged(${i})" />
+          Logged in mileage app
+        </label>
+      ` : ''}
     </div>
   `;}).join('');
 }
 function addEditingVisit(){
   const date = document.getElementById('nv_date').value || fmtDate(today());
+  const type = document.getElementById('nv_type').value;
   const notes = document.getElementById('nv_notes').value.trim();
-  editingVisits.push({ id: uid(), date, notes, loggedMileage:false });
+  editingVisits.push({ id: uid(), date, type, notes, loggedMileage:false });
   document.getElementById('nv_notes').value = '';
   document.getElementById('visitsListEditor').innerHTML = visitsListEditorHTML();
 }
@@ -1458,6 +1955,39 @@ function removeEditingMarketing(i){
   editingMarketing.splice(i,1);
   document.getElementById('marketingListEditor').innerHTML = marketingListEditorHTML();
 }
+function initiativesEditorHTML(){
+  if(!state.data.initiatives.length) return `<div class="empty" style="padding:4px 0;">No initiatives set up yet — add some in Settings.</div>`;
+  return state.data.initiatives.map(init=>{
+    const entry = editingInitiatives.find(e=>e.initiativeId===init.id);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--line-soft);">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" ${entry?'checked':''} onchange="toggleInitiativeDiscussed('${init.id}')" />
+        <span style="font-weight:600;font-size:13px;">${esc(init.title)}</span>
+      </label>
+      ${init.description? `<div style="font-size:12px;color:var(--muted);margin:2px 0 0 26px;">${esc(init.description)}</div>`:''}
+      ${entry ? `
+        <div style="margin-left:26px;margin-top:6px;display:flex;gap:8px;">
+          <input type="date" value="${entry.date}" onchange="updateInitiativeDate('${init.id}', this.value)" style="max-width:150px;" />
+          <input placeholder="Notes" value="${esc(entry.notes||'')}" onchange="updateInitiativeNote('${init.id}', this.value)" />
+        </div>
+      ` : ''}
+    </div>`;
+  }).join('');
+}
+function toggleInitiativeDiscussed(initiativeId){
+  const i = editingInitiatives.findIndex(e=>e.initiativeId===initiativeId);
+  if(i>=0) editingInitiatives.splice(i,1);
+  else editingInitiatives.push({ id: uid(), initiativeId, date: fmtDate(today()), notes:'' });
+  document.getElementById('initiativesEditor').innerHTML = initiativesEditorHTML();
+}
+function updateInitiativeDate(initiativeId, val){
+  const e = editingInitiatives.find(e=>e.initiativeId===initiativeId);
+  if(e) e.date = val;
+}
+function updateInitiativeNote(initiativeId, val){
+  const e = editingInitiatives.find(e=>e.initiativeId===initiativeId);
+  if(e) e.notes = val;
+}
 function removeEditingProduct(i){
   editingProducts.splice(i,1);
   document.getElementById('productsListEditor').innerHTML = productsListEditorHTML();
@@ -1476,6 +2006,7 @@ function saveAccountForm(id){
     state: document.getElementById('f_state').value,
     address: document.getElementById('f_address').value.trim(),
     csmId: document.getElementById('f_csm').value || null,
+    parentGroupId: document.getElementById('f_parentGroup').value || null,
     status: document.getElementById('f_status').value,
     priority: document.getElementById('f_priority').value,
     renewalDate: document.getElementById('f_renewal').value || null,
@@ -1484,6 +2015,7 @@ function saveAccountForm(id){
     products: editingProducts,
     visitLog: editingVisits,
     marketing: editingMarketing,
+    initiativesDiscussed: editingInitiatives,
     planning: planning,
   };
   if(!vals.name){ document.getElementById('f_name').style.borderColor = 'var(--red)'; return; }
@@ -1533,7 +2065,7 @@ function saveTaskForm(id){
   render();
 }
 
-function esc(s){ const d=document.createElement('div'); d.innerText = s==null? '' : s; return d.innerHTML; }
+function esc(s){ const d=document.createElement('div'); d.textContent = s==null? '' : s; return d.innerHTML; }
 
 load();
 </script>
