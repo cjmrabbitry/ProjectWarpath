@@ -233,7 +233,7 @@ const TIPS = {
 let state = {
   data: { accounts: [], tasks: [], csms: [], csmRequests: [], settings: { homeBase: '' }, boyfriendSchedule: { workDays: [], overrides: [] }, initiatives: [] },
   ui: { tab: 'overview', search: '', filterStates: [], filterStatuses: [], modal: null, deleteConfirm: null,
-    productSearch: '', filterProductCategory: 'All', filterProductVendor: 'All', filterRenewalSoon: false, filterStale: false, routeSelection: [],
+    productSearch: '', filterProductCategories: [], filterProductVendors: [], filterRenewalSoon: false, filterStale: false, routeSelection: [],
     filterCsmStatus: 'Open', tripStart: null, tripNights: 1 }
 };
 
@@ -656,16 +656,11 @@ function focusScore(a){
   if(d!==null) score += Math.max(0, 90-d);
   return score;
 }
-function isThisMonth(dateStr){
-  if(!dateStr) return false;
-  const d = parseLocal(dateStr);
-  const t = today();
-  return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth();
-}
-function atRiskContactStats(){
-  const atRisk = state.data.accounts.filter(a=>a.status==='At Risk');
-  const contacted = atRisk.filter(a=> (a.visitLog||[]).some(v=>isThisMonth(v.date)) );
-  return { total: atRisk.length, contacted: contacted.length };
+function weeklyContactStats(){
+  const inWindow = (dateStr) => dateStr!=null && daysUntil(dateStr)!==null && daysUntil(dateStr)>=-7 && daysUntil(dateStr)<=0;
+  const total = state.data.accounts.length;
+  const contacted = state.data.accounts.filter(a=> (a.visitLog||[]).some(v=>inWindow(v.date)) );
+  return { total, contacted: contacted.length };
 }
 function completedLast7Days(){
   return state.data.tasks.filter(t=>t.done && t.completedAt && daysUntil(t.completedAt)!==null && daysUntil(t.completedAt)>=-7 && daysUntil(t.completedAt)<=0).length;
@@ -775,16 +770,13 @@ async function copyWeekReview(){
   }
 }
 function momentumHTML(){
-  const stats = atRiskContactStats();
+  const stats = weeklyContactStats();
   const streak = completedLast7Days();
-  const monthName = today().toLocaleString('en-US',{month:'long'});
   if(stats.total===0){
     return `
       <div class="card" style="text-align:center;padding:20px 14px;margin-bottom:4px;">
-        <div style="font-size:34px;">🎉</div>
-        <div style="font-weight:700;font-size:15px;margin-top:4px;">Nothing at risk right now</div>
-        <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Nice place to be.</div>
-        ${streak>0 ? `<div style="font-size:12px;color:var(--muted-2);margin-top:10px;">🔥 ${streak} task${streak===1?'':'s'} completed this week</div>` : ''}
+        <div style="font-size:34px;">👋</div>
+        <div style="font-weight:700;font-size:15px;margin-top:4px;">Add some accounts to start tracking</div>
       </div>
     `;
   }
@@ -795,16 +787,16 @@ function momentumHTML(){
   const ringColor = allDone ? '#4C7A5E' : '#C97A2B';
   return `
     <div class="card" style="text-align:center;padding:18px 14px;margin-bottom:4px;">
-      <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;">At-risk accounts contacted in ${esc(monthName)}</div>
+      <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;">Accounts contacted this week</div>
       <svg width="130" height="130" viewBox="0 0 120 120" style="display:block;margin:0 auto;">
         <circle cx="60" cy="60" r="${r}" fill="none" stroke="#E7EBE6" stroke-width="12" />
         <circle cx="60" cy="60" r="${r}" fill="none" stroke="${ringColor}" stroke-width="12"
           stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
           stroke-linecap="round" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 0.6s ease;" />
         <text x="60" y="57" text-anchor="middle" font-size="24" font-weight="700" fill="#1F2E29" font-family="Georgia, serif">${stats.contacted}/${stats.total}</text>
-        <text x="60" y="76" text-anchor="middle" font-size="10.5" fill="#5B6B62">${pct}% this month</text>
+        <text x="60" y="76" text-anchor="middle" font-size="10.5" fill="#5B6B62">${pct}% this week</text>
       </svg>
-      ${allDone ? `<div style="font-weight:700;color:var(--green);font-size:13.5px;margin-top:6px;">🎉 All caught up!</div>` : ''}
+      ${allDone ? `<div style="font-weight:700;color:var(--green);font-size:13.5px;margin-top:6px;">🎉 Everyone touched this week!</div>` : ''}
       ${streak>0 ? `<div style="font-size:12px;color:var(--muted-2);margin-top:8px;">🔥 ${streak} task${streak===1?'':'s'} completed this week</div>` : ''}
     </div>
   `;
@@ -1442,21 +1434,36 @@ function productsHTML(){
 
     <input id="productSearchInput" placeholder="Search by product or account name…" value="${esc(state.ui.productSearch)}" style="margin-top:14px;" />
     <div class="filter-bar">
-      ${['All',...PRODUCT_CATEGORIES].map(c=>`<button class="chip ${state.ui.filterProductCategory===c?'on':''}" onclick="setProductFilter('filterProductCategory','${c}')">${c}</button>`).join('')}
+      ${['All',...PRODUCT_CATEGORIES].map(c=>`<button class="chip ${c==='All'? (state.ui.filterProductCategories.length===0?'on':'') : (state.ui.filterProductCategories.includes(c)?'on':'')}" onclick="toggleProductCategoryFilter('${c}')">${c}</button>`).join('')}
     </div>
     <div class="filter-bar">
-      ${['All',...VENDORS].map(v=>`<button class="chip ${state.ui.filterProductVendor===v?'on':''}" onclick="setProductFilter('filterProductVendor','${v}')">${v==='CDK'?'Ours':v==='Competitor'?'Competitor':'All'}</button>`).join('')}
+      ${['All',...VENDORS].map(v=>`<button class="chip ${v==='All'? (state.ui.filterProductVendors.length===0?'on':'') : (state.ui.filterProductVendors.includes(v)?'on':'')}" onclick="toggleProductVendorFilter('${v}')">${v==='CDK'?'Ours':v==='Competitor'?'Competitor':'All'}</button>`).join('')}
     </div>
     <div id="productsReportContainer" style="margin-top:14px;"></div>
   `;
 }
 function onProductSearchInput(e){ state.ui.productSearch = e.target.value; renderProductsReport(); }
-function setProductFilter(key,val){ state.ui[key]=val; renderProductsReport(); }
+function toggleProductCategoryFilter(c){
+  if(c==='All'){ state.ui.filterProductCategories = []; }
+  else {
+    const i = state.ui.filterProductCategories.indexOf(c);
+    if(i>=0) state.ui.filterProductCategories.splice(i,1); else state.ui.filterProductCategories.push(c);
+  }
+  renderProductsReport();
+}
+function toggleProductVendorFilter(v){
+  if(v==='All'){ state.ui.filterProductVendors = []; }
+  else {
+    const i = state.ui.filterProductVendors.indexOf(v);
+    if(i>=0) state.ui.filterProductVendors.splice(i,1); else state.ui.filterProductVendors.push(v);
+  }
+  renderProductsReport();
+}
 function filteredProductRows(){
   const q = state.ui.productSearch.trim().toLowerCase();
   return allProductRows().filter(r=>{
-    if(state.ui.filterProductCategory!=='All' && r.product.category!==state.ui.filterProductCategory) return false;
-    if(state.ui.filterProductVendor!=='All' && r.product.vendor!==state.ui.filterProductVendor) return false;
+    if(state.ui.filterProductCategories.length && !state.ui.filterProductCategories.includes(r.product.category)) return false;
+    if(state.ui.filterProductVendors.length && !state.ui.filterProductVendors.includes(r.product.vendor)) return false;
     if(q && !(r.product.name.toLowerCase().includes(q) || r.account.name.toLowerCase().includes(q))) return false;
     return true;
   }).sort((a,b)=>a.account.name.localeCompare(b.account.name));
@@ -1954,6 +1961,7 @@ function accountModal(){
       </div>
       <div class="field"><label>Part of a dealer group?</label>
         <select id="f_parentGroup"><option value="">— Standalone account —</option>${state.data.accounts.filter(x=>x.id!==a.id).map(x=>`<option value="${x.id}" ${a.parentGroupId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+        <div style="font-size:11.5px;color:var(--muted-2);margin-top:4px;">To start a new group: add the group itself as a regular account first, then come back here on each of its stores and pick it from this list.</div>
       </div>
       <div class="row2">
         <div class="field"><label>Status</label><select id="f_status">${STATUSES.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
