@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warpath</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#1F2E29;
+    --paper:#EEF0EA;
+    --card:#FFFFFF;
+    --line:rgba(31,46,41,0.13);
+    --line-soft:rgba(31,46,41,0.07);
+    --amber:#C97A2B;
+    --amber-deep:#A85F1E;
+    --amber-bg:#FBEEE0;
+    --red:#B5462F;
+    --red-bg:#F7E7E2;
+    --green:#4C7A5E;
+    --green-bg:#E6EEE8;
+    --gold:#B08D1C;
+    --gold-bg:#F5EED2;
+    --muted:#5B6B62;
+    --muted-2:#8C978F;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size:15px;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', serif;}
+  #app{max-width:900px;margin:0 auto;padding-bottom:64px;}
+
+  /* ---- Header ---- */
+  header.top{
+    padding:20px 16px 14px;
+    border-bottom:1px solid var(--line);
+    background:var(--paper);
+    position:sticky;top:0;z-index:20;
+  }
+  header.top .title-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  header.top h1{font-size:21px;font-weight:700;margin:0;letter-spacing:-0.01em;color:var(--ink);}
+  header.top .save-status{font-size:11.5px;color:var(--muted-2);white-space:nowrap;}
+  header.top p.sub{margin:3px 0 0;color:var(--muted);font-size:13px;}
+
+  nav.tabs{
+    display:flex;gap:6px;overflow-x:auto;padding:12px 16px 0;
+    border-bottom:1px solid var(--line);background:var(--paper);
+    position:sticky;top:64px;z-index:19;
+    scrollbar-width:none;
+  }
+  nav.tabs::-webkit-scrollbar{display:none;}
+  nav.tabs button{
+    flex:0 0 auto;
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size:13.5px;font-weight:600;
+    padding:9px 14px;border:none;background:none;
+    color:var(--muted);cursor:pointer;
+    border-bottom:2.5px solid transparent;
+    margin-bottom:-1px;
+  }
+  nav.tabs button.active{color:var(--ink);border-bottom-color:var(--amber-deep);}
+
+  #content{padding:16px;}
+
+  /* ---- Generic ---- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .section-title{font-size:13px;font-weight:600;text-transform:none;color:var(--muted);margin:22px 0 10px;}
+  .section-title:first-child{margin-top:0;}
+  .btn{
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:13.5px;font-weight:600;
+    padding:9px 14px;border-radius:7px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);cursor:pointer;
+  }
+  .btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .btn.amber{background:var(--amber);color:#fff;border-color:var(--amber);}
+  .btn.danger{color:var(--red);border-color:var(--red);background:var(--red-bg);}
+  .btn.ghost{background:none;border-color:transparent;color:var(--muted);}
+  .btn.small{padding:6px 10px;font-size:12.5px;}
+  .btn:active{transform:translateY(1px);}
+  input,select,textarea{
+    font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:14px;color:var(--ink);
+    padding:9px 10px;border:1px solid var(--line);border-radius:7px;
+    background:#fff;width:100%;
+  }
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:0 0 4px;}
+  .field{margin-bottom:12px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  /* ---- Stat cards ---- */
+  .stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px 14px;}
+  .stat .num{font-family:Georgia, 'Iowan Old Style', 'Times New Roman', serif;font-size:26px;font-weight:700;line-height:1;}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:5px;}
+  .stat.flag-red .num{color:var(--red);}
+  .stat.flag-amber .num{color:var(--amber-deep);}
+
+  /* ---- Badges ---- */
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;white-space:nowrap;}
+  .badge.Healthy{background:var(--green-bg);color:var(--green);}
+  .badge.Renewal-Upcoming{background:var(--amber-bg);color:var(--amber-deep);}
+  .badge.At-Risk{background:var(--red-bg);color:var(--red);}
+  .badge.Opportunity{background:var(--gold-bg);color:var(--gold);}
+  .badge.priority-High{background:#F3E4E4;color:#8C3B2E;}
+  .badge.priority-Medium{background:#F0EADB;color:#8C6B1C;}
+  .badge.priority-Low{background:#E7EBE6;color:#5B6B62;}
+  .badge.vendor-CDK{background:var(--green-bg);color:var(--green);}
+  .badge.vendor-Competitor{background:var(--red-bg);color:var(--red);}
+
+  /* ---- Overview list rows ---- */
+  .flist{display:flex;flex-direction:column;gap:8px;}
+  .frow{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+    cursor:pointer;
+  }
+  .frow .fmain{min-width:0;}
+  .frow .fname{font-weight:600;font-size:14px;}
+  .frow .fmeta{font-size:12px;color:var(--muted);margin-top:2px;}
+  .frow .fright{text-align:right;flex:0 0 auto;}
+  .frow .fdays{font-size:12px;font-weight:600;color:var(--amber-deep);white-space:nowrap;}
+  .empty{color:var(--muted-2);font-size:13px;padding:14px 2px;}
+
+  /* ---- Accounts tab ---- */
+  .filter-bar{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .chip{
+    font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:20px;
+    border:1px solid var(--line);background:var(--card);color:var(--muted);cursor:pointer;
+  }
+  .chip.on{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+  .acct-card{
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px 13px;margin-bottom:9px;
+  }
+  .acct-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;}
+  .acct-name{font-weight:600;font-size:14.5px;}
+  .acct-loc{font-size:12px;color:var(--muted);margin-top:1px;}
+  .acct-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;}
+  .acct-details{margin-top:9px;padding-top:9px;border-top:1px solid var(--line-soft);font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px;}
+  .acct-actions{display:flex;gap:6px;margin-top:10px;}
+  .tip-box{background:var(--amber-bg);border-radius:8px;padding:9px 11px;margin-top:9px;font-size:12.5px;color:#6B4A1E;}
+  .tip-box b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.02em;color:var(--amber-deep);margin-bottom:3px;}
+
+  /* ---- Territory tab ---- */
+  .state-group{margin-bottom:18px;}
+  .state-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;}
+  .state-head h3{font-size:15px;margin:0;}
+  .state-head span{font-size:12px;color:var(--muted-2);}
+  .visit-row{
+    background:var(--card);border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;margin-bottom:7px;
+  }
+  .visit-row .vtop{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .visit-row .vname{font-weight:600;font-size:14px;}
+  .visit-row .vmeta{font-size:11.5px;color:var(--muted);margin-top:1px;}
+  .visit-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px;}
+  .visit-dates .field{margin-bottom:0;}
+  .unscheduled{color:var(--amber-deep);font-weight:600;font-size:11px;}
+
+  /* ---- Tasks tab ---- */
+  .task-group{margin-bottom:16px;}
+  .task-row{
+    display:flex;align-items:flex-start;gap:10px;
+    background:var(--card);border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;margin-bottom:7px;
+  }
+  .task-row.done{opacity:0.5;}
+  .task-row input[type=checkbox]{width:18px;height:18px;flex:0 0 auto;margin-top:1px;accent-color:var(--ink);}
+  .task-main{flex:1;min-width:0;}
+  .task-title{font-size:14px;font-weight:500;}
+  .task-row.done .task-title{text-decoration:line-through;}
+  .task-meta{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .task-meta.overdue{color:var(--red);font-weight:600;}
+
+  /* ---- Modal ---- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(31,46,41,0.42);
+    display:flex;align-items:flex-end;justify-content:center;z-index:50;
+  }
+  .modal{
+    background:var(--paper);width:100%;max-width:900px;max-height:88vh;overflow-y:auto;
+    border-radius:16px 16px 0 0;padding:18px 16px 26px;
+  }
+  @media(min-width:640px){
+    .overlay{align-items:center;}
+    .modal{border-radius:14px;max-height:80vh;}
+  }
+  .modal h2{font-size:17px;margin:0 0 14px;}
+  .modal-close{position:sticky;top:0;text-align:right;margin-bottom:-6px;}
+
+  .fab-add{
+    width:100%;margin-top:4px;
+  }
+  a.linklike{color:var(--amber-deep);font-weight:600;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div style="padding:60px 20px;color:#5B6B62;font-size:14px;">Loading your dashboard…</div>
+</div>
+
+<script>
+const STORAGE_KEY = 'territory-dashboard-v1';
+const STATES = ['MD','DE','VA','PA','NJ'];
+const STATUSES = ['Healthy','Renewal Upcoming','At Risk','Opportunity'];
+const PRODUCT_CATEGORIES = ['DMS','CRM','Service','Other'];
+const VENDORS = ['CDK','Competitor'];
+const PRIORITIES = ['High','Medium','Low'];
+const CSM_REQUEST_TYPES = ['CSS Case','Other'];
+const DEPARTMENTS = ['Accounting','Sales','Service','Parts'];
+
+const TIPS = {
+  'Renewal Upcoming': ["Open the renewal conversation 60–90 days out, not at the deadline.","Bring usage and ROI data from the current term into the conversation.","Ask what's frustrating them now, before it becomes a renewal objection."],
+  'At Risk': ["Get face-to-face before you propose anything — don't negotiate over email first.","Pin down the actual trigger: price, service response time, or a competitor conversation.","Loop in your manager or a specialist early if the relationship has real strain."],
+  'Opportunity': ["Anchor the pitch to a specific workflow gap this closes for them, not a feature list.","Bring a peer dealer's results or a short live demo instead of a deck.","Time the pitch to their renewal or budget cycle for easier approval."],
+  'Healthy': ["Use the equity here to ask for a referral into another rooftop.","Check in on a light cadence even with nothing to sell — stay top of mind.","Look for one adjacent product that fits how they already work."]
+};
+
+let state = {
+  data: { accounts: [], tasks: [], csms: [], csmRequests: [] },
+  ui: { tab: 'overview', search: '', filterState: 'All', filterStatus: 'All', modal: null, deleteConfirm: null,
+    productSearch: '', filterProductCategory: 'All', filterProductVendor: 'All', filterRenewalSoon: false, routeSelection: [],
+    filterCsmStatus: 'Open' }
+};
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function fmtDate(d){ const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
+function addDays(base,n){ const d=new Date(base); d.setDate(d.getDate()+n); return d; }
+function today(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+function parseLocal(str){ return str ? new Date(str+'T00:00:00') : null; }
+function daysUntil(str){ if(!str) return null; const diff = parseLocal(str) - today(); return Math.round(diff/86400000); }
+function niceDate(str){
+  if(!str) return '—';
+  const d = parseLocal(str);
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year: d.getFullYear()!==new Date().getFullYear() ? 'numeric' : undefined });
+}
+function daysLabel(str){
+  const n = daysUntil(str);
+  if(n===null) return '';
+  if(n===0) return 'Today';
+  if(n===1) return 'Tomorrow';
+  if(n===-1) return '1 day overdue';
+  if(n<0) return `${Math.abs(n)} days overdue`;
+  return `in ${n} days`;
+}
+function slug(s){ return s.replace(/\s+/g,'-'); }
+function monthsLabel(str){
+  const d = daysUntil(str);
+  if(d===null) return '';
+  if(d<0) return daysLabel(str);
+  if(d<60) return daysLabel(str);
+  const months = Math.round(d/30.44);
+  return `~${months} month${months===1?'':'s'} left`;
+}
+function lastVisitDate(a){
+  const log = a.visitLog||[];
+  if(!log.length) return null;
+  return [...log].sort((x,y)=>y.date.localeCompare(x.date))[0].date;
+}
+function mapsAddress(a){ return a.address ? a.address : `${a.city}, ${a.state}`; }
+function mapsSingleUrl(a){ return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapsAddress(a))}`; }
+function mapsRouteUrl(accounts){ return `https://www.google.com/maps/dir/${accounts.map(a=>encodeURIComponent(mapsAddress(a))).join('/')}`; }
+
+function seedData(){
+  const emptyPlanning = () => ({ Accounting:{strengths:'',weaknesses:''}, Sales:{strengths:'',weaknesses:''}, Service:{strengths:'',weaknesses:''}, Parts:{strengths:'',weaknesses:''} });
+  const acc = (o) => ({ id: uid(), address:'', nextVisit:null, notes:'', products:[], visitLog:[], marketing:[], csmId:null, planning: emptyPlanning(), ...o });
+  const t = today();
+  const prod = (category,name,vendor) => ({ id: uid(), category, name, vendor });
+  const visit = (date,notes,loggedMileage) => ({ id: uid(), date, notes: notes||'', loggedMileage: !!loggedMileage });
+  const mkt = (date,item) => ({ id: uid(), date, item });
+
+  const csmJordan = { id: uid(), name:'Jordan Blake', email:'jordan.blake@cdk.com' };
+  const csmPriya = { id: uid(), name:'Priya Nair', email:'priya.nair@cdk.com' };
+  const csmMarcus = { id: uid(), name:'Marcus Webb', email:'marcus.webb@cdk.com' };
+  const csmDana = { id: uid(), name:'Dana Sutton', email:'dana.sutton@cdk.com' };
+  state.data.csms = [csmJordan, csmPriya, csmMarcus, csmDana];
+
+  state.data.accounts = [
+    acc({ name:'Crestline Ford', city:'Frederick', state:'MD', status:'Renewal Upcoming', priority:'High', renewalDate: fmtDate(addDays(t,18)), nextVisit: fmtDate(addDays(t,6)), notes:'Renewal conversation started. GM wants a pricing review before he signs.', csmId: csmJordan.id,
+      planning: { Accounting:{strengths:'Pays on time, controller is engaged.', weaknesses:'Slow to approve new POs — 2-3 week lag.'},
+                  Sales:{strengths:'Strong desk process, uses CRM daily.', weaknesses:''},
+                  Service:{strengths:'New service director, receptive to training.', weaknesses:'Advisors skip CRM logging half the time.'},
+                  Parts:{strengths:'', weaknesses:'Still on paper counter tickets.'} },
+      visitLog:[ visit(fmtDate(addDays(t,-25)), 'Walked the lot, met the new service director.', true) ],
+      marketing:[ mkt(fmtDate(addDays(t,-25)), 'Left CDK renewal savings one-pager with GM') ],
+      products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','CDK CRM','CDK'), prod('Service','CDK Service','CDK') ] }),
+    acc({ name:'Somerset Nissan', city:'Somerville', state:'NJ', status:'At Risk', priority:'High', renewalDate: fmtDate(addDays(t,22)), nextVisit: fmtDate(addDays(t,3)), notes:'Service manager complained about support response time twice this quarter.', csmId: csmPriya.id,
+      visitLog:[ visit(fmtDate(addDays(t,-51)), 'Tense visit — service dept frustrated with ticket response time.', true) ],
+      products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','VinSolutions','Competitor'), prod('Service','CDK Service','CDK') ] }),
+    acc({ name:'Bayshore Chevrolet', city:'Ocean City', state:'MD', status:'At Risk', priority:'High', renewalDate: fmtDate(addDays(t,64)), nextVisit: null, notes:'Owner mentioned a competitor demo last call. Needs a visit booked.', csmId: csmPriya.id,
+      visitLog:[ visit(fmtDate(addDays(t,-40)), '', true) ],
+      products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','DealerSocket','Competitor') ] }),
+    acc({ name:'Wilmington Auto Mall', city:'Wilmington', state:'DE', status:'Opportunity', priority:'Medium', renewalDate: fmtDate(addDays(t,140)), nextVisit: fmtDate(addDays(t,20)), notes:'Good fit for Service Marketing add-on — bring the one-pager.', csmId: csmJordan.id,
+      visitLog:[ visit(fmtDate(addDays(t,-14)), 'Dropped off Service Marketing brochure, GM said he\'d review with partners.', false) ],
+      marketing:[ mkt(fmtDate(addDays(t,-14)), 'Service Marketing brochure') ],
+      products:[ prod('DMS','Reynolds & Reynolds','Competitor'), prod('CRM','CDK CRM','CDK') ] }),
+    acc({ name:'Keystone Toyota', city:'Harrisburg', state:'PA', status:'Renewal Upcoming', priority:'Medium', renewalDate: fmtDate(addDays(t,41)), nextVisit: fmtDate(addDays(t,15)), notes:'', csmId: csmMarcus.id,
+      visitLog:[ visit(fmtDate(addDays(t,-70)), '', true) ],
+      products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','CDK CRM','CDK'), prod('Other','Website','Competitor') ] }),
+    acc({ name:'Shore Motors CDJR', city:'Virginia Beach', state:'VA', status:'Healthy', priority:'Low', renewalDate: fmtDate(addDays(t,300)), nextVisit: null, notes:'Steady account. Worth a referral ask next visit.', csmId: csmDana.id,
+      visitLog:[ visit(fmtDate(addDays(t,-30)), '', true) ],
+      products:[ prod('DMS','CDK DMS','CDK'), prod('CRM','CDK CRM','CDK'), prod('Service','CDK Service','CDK') ] }),
+    acc({ name:'Turnpike Honda Group', city:'Cherry Hill', state:'NJ', status:'Healthy', priority:'Low', renewalDate: fmtDate(addDays(t,210)), nextVisit: fmtDate(addDays(t,60)), notes:'', csmId: csmMarcus.id,
+      visitLog:[ visit(fmtDate(addDays(t,-9)), '', true) ],
+      products:[ prod('DMS','Reynolds & Reynolds','Competitor'), prod('CRM','Reynolds CRM','Competitor'), prod('Service','CDK Service','CDK') ] }),
+  ];
+  const findId = (name) => state.data.accounts.find(a=>a.name===name).id;
+
+  state.data.csmRequests = [
+    { id: uid(), accountId: findId('Crestline Ford'), csmId: csmJordan.id, type:'CSS Case', caseNumber:'CS-482910', description:'DMS reconciliation error on RO close — needs escalation.', requestedDate: fmtDate(addDays(t,-6)), status:'Open', completedDate:null, followUpDate: fmtDate(addDays(t,-1)) },
+    { id: uid(), accountId: findId('Wilmington Auto Mall'), csmId: csmJordan.id, type:'CSS Case', caseNumber:'CS-483102', description:'Login access issue for new sales manager.', requestedDate: fmtDate(addDays(t,-2)), status:'Open', completedDate:null, followUpDate: fmtDate(addDays(t,3)) },
+    { id: uid(), accountId: findId('Somerset Nissan'), csmId: csmPriya.id, type:'Other', caseNumber:'', description:'Set up new CRM automation workflow for service follow-ups.', requestedDate: fmtDate(addDays(t,-10)), status:'Completed', completedDate: fmtDate(addDays(t,-2)), followUpDate: null },
+  ];
+
+  state.data.tasks = [
+    { id: uid(), title:'Prep renewal proposal for Somerset Nissan', accountId: findId('Somerset Nissan'), dueDate: fmtDate(addDays(t,1)), priority:'High', done:false, loggedToSF:false },
+    { id: uid(), title:'Call Bayshore Chevrolet GM to book a visit', accountId: findId('Bayshore Chevrolet'), dueDate: fmtDate(addDays(t,-2)), priority:'High', done:false, loggedToSF:false },
+    { id: uid(), title:'Send pricing options to Crestline Ford', accountId: findId('Crestline Ford'), dueDate: fmtDate(addDays(t,3)), priority:'High', done:false, loggedToSF:false },
+    { id: uid(), title:'Send Service Marketing one-pager to Wilmington Auto Mall', accountId: findId('Wilmington Auto Mall'), dueDate: fmtDate(addDays(t,5)), priority:'Medium', done:false, loggedToSF:false },
+    { id: uid(), title:'Build October territory review agenda', accountId: null, dueDate: fmtDate(addDays(t,10)), priority:'Medium', done:false, loggedToSF:false },
+    { id: uid(), title:'Left voicemail with Keystone Toyota service manager', accountId: findId('Keystone Toyota'), dueDate: fmtDate(addDays(t,-1)), priority:'Medium', done:true, completedAt: fmtDate(addDays(t,-1)), loggedToSF:false },
+  ];
+}
+
+const SUPABASE_URL = 'https://ibmuskjywznaplwohonc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlibXVza2p5d3puYXBsd29ob25jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1NzI3NzMsImV4cCI6MjEwNTE0ODc3M30.FsaFAx3jcDQwyruI2NaclTn9jiWn-erCy_Q8chEcKvs';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let currentUser = null;
+
+let saveTimer = null;
+let dbWriteInFlight = false;
+let dbWriteQueued = false;
+
+function setSaveStatus(text){
+  const el = document.getElementById('saveStatus');
+  if(el) el.textContent = text;
+}
+
+async function dbSetNow(){
+  if(dbWriteInFlight){ dbWriteQueued = true; return; }
+  dbWriteInFlight = true;
+  setSaveStatus('Syncing…');
+  try{
+    const { error } = await sb.from('dashboard_data').upsert({
+      user_id: currentUser.id,
+      data: state.data,
+      updated_at: new Date().toISOString(),
+    });
+    if(error) throw error;
+    setSaveStatus('Synced');
+  }catch(e){
+    setSaveStatus('Sync failed — will retry next change');
+    console.error('supabase save error', e);
+  }
+  dbWriteInFlight = false;
+  if(dbWriteQueued){ dbWriteQueued = false; dbSetNow(); }
+}
+
+function persistNow(){
+  state.data.updatedAt = new Date().toISOString();
+  dbSetNow();
+}
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistNow, 150);
+}
+
+async function loadFromSupabase(){
+  try{
+    const { data: row, error } = await sb.from('dashboard_data').select('data').eq('user_id', currentUser.id).maybeSingle();
+    if(error) throw error;
+    if(row && row.data && Array.isArray(row.data.accounts)){
+      state.data = row.data;
+    } else {
+      seedData();
+      await sb.from('dashboard_data').upsert({ user_id: currentUser.id, data: state.data, updated_at: new Date().toISOString() });
+    }
+  }catch(e){
+    console.error('supabase load error', e);
+    seedData();
+  }
+  render();
+}
+
+/* ---------- auth ---------- */
+async function signOut(){
+  await sb.auth.signOut();
+  currentUser = null;
+  renderAuthScreen();
+}
+function authScreenHTML(mode, errorMsg){
+  return `
+    <div style="max-width:360px;margin:80px auto;padding:0 20px;">
+      <h1 style="font-family:Georgia, 'Iowan Old Style', 'Times New Roman', serif;font-size:26px;margin-bottom:4px;">Warpath</h1>
+      <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:20px;">${mode==='signup' ? 'Create your account' : 'Sign in'}</p>
+      <div class="field"><label>Email</label><input id="auth_email" type="email" data-autofocus /></div>
+      <div class="field"><label>Password</label><input id="auth_password" type="password" /></div>
+      ${errorMsg ? `<div style="color:var(--red);font-size:12.5px;margin-bottom:10px;">${esc(errorMsg)}</div>` : ''}
+      <button class="btn primary fab-add" onclick="${mode==='signup' ? 'doSignUp()' : 'doSignIn()'}">${mode==='signup' ? 'Create account' : 'Sign in'}</button>
+      <p style="font-size:12.5px;color:var(--muted-2);margin-top:14px;text-align:center;">
+        ${mode==='signup'
+          ? `Already have an account? <a class="linklike" onclick="renderAuthScreen('signin')">Sign in</a>`
+          : `First time here? <a class="linklike" onclick="renderAuthScreen('signup')">Create an account</a>`}
+      </p>
+    </div>
+  `;
+}
+function renderAuthScreen(mode, errorMsg){
+  document.getElementById('app').innerHTML = authScreenHTML(mode || 'signin', errorMsg);
+  const f = document.querySelector('[data-autofocus]');
+  if(f) f.focus();
+}
+async function doSignIn(){
+  const email = document.getElementById('auth_email').value.trim();
+  const password = document.getElementById('auth_password').value;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ renderAuthScreen('signin', error.message); return; }
+  currentUser = data.user;
+  await loadFromSupabase();
+}
+async function doSignUp(){
+  const email = document.getElementById('auth_email').value.trim();
+  const password = document.getElementById('auth_password').value;
+  if(password.length < 6){ renderAuthScreen('signup', 'Password needs at least 6 characters.'); return; }
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if(error){ renderAuthScreen('signup', error.message); return; }
+  if(!data.session){ renderAuthScreen('signin', 'Account created — check your email to confirm, then sign in.'); return; }
+  currentUser = data.user;
+  await loadFromSupabase();
+}
+async function load(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session && session.user){
+    currentUser = session.user;
+    await loadFromSupabase();
+  } else {
+    renderAuthScreen('signin');
+  }
+}
+
+function niceDateTime(iso){
+  if(!iso) return 'never';
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+}
+
+function downloadBackup(){
+  clearTimeout(saveTimer);
+  persistNow();
+  const jsonStr = JSON.stringify(state.data, null, 2);
+  const blob = new Blob([jsonStr], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'warpath-backup.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function restoreBackup(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!(parsed && Array.isArray(parsed.accounts) && Array.isArray(parsed.tasks))){
+        state.ui.backupError = "That file doesn't look like a dashboard file.";
+        state.ui.pendingRestore = null;
+        render();
+        return;
+      }
+      const currentTime = state.data.updatedAt ? new Date(state.data.updatedAt).getTime() : 0;
+      const fileTime = parsed.updatedAt ? new Date(parsed.updatedAt).getTime() : 0;
+      if(currentTime && fileTime && fileTime < currentTime){
+        state.ui.pendingRestore = parsed;
+        state.ui.backupError = null;
+        render();
+      } else {
+        applyRestore(parsed);
+      }
+    }catch(err){
+      state.ui.backupError = "Couldn't read that file.";
+      render();
+    }
+  };
+  reader.readAsText(file);
+}
+function applyRestore(parsed){
+  state.data = parsed;
+  persistNow();
+  state.ui.modal = null;
+  state.ui.pendingRestore = null;
+  state.ui.backupError = null;
+  render();
+}
+function cancelRestore(){ state.ui.pendingRestore = null; render(); }
+
+/* ---------- shared helpers ---------- */
+function getAccount(id){ return state.data.accounts.find(a=>a.id===id); }
+function statusClass(s){ return s.replace(/\s+/g,'-'); }
+
+function setTab(tab){ state.ui.tab = tab; state.ui.search=''; state.ui.filterRenewalSoon=false; render(); }
+function goToAccounts(filters){
+  state.ui.tab='accounts'; state.ui.search=''; state.ui.expanded=null;
+  state.ui.filterState = 'All';
+  state.ui.filterStatus = (filters && filters.status) || 'All';
+  state.ui.filterRenewalSoon = !!(filters && filters.renewalSoon);
+  render();
+}
+
+/* ---------- render root ---------- */
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <header class="top">
+      <div class="title-row">
+        <h1>Warpath</h1>
+        <div style="display:flex;gap:6px;">
+          <button class="btn ghost small" onclick="openBackupModal()" style="padding:4px 8px;">Backup</button>
+          <button class="btn ghost small" onclick="signOut()" style="padding:4px 8px;">Log out</button>
+        </div>
+      </div>
+      <div style="text-align:right;"><span class="save-status" id="saveStatus">Saved on this device</span></div>
+      <p class="sub">${state.data.accounts.length} accounts across ${new Set(state.data.accounts.map(a=>a.state)).size} states</p>
+    </header>
+    <nav class="tabs">
+      ${tabBtn('overview','Overview')}
+      ${tabBtn('accounts','Accounts')}
+      ${tabBtn('territory','Territory')}
+      ${tabBtn('products','Products')}
+      ${tabBtn('csms','CSMs')}
+      ${tabBtn('tasks','Tasks')}
+    </nav>
+    <div id="content">${tabContent()}</div>
+    ${modalHTML()}
+  `;
+  if(state.ui.tab==='accounts'){
+    const input = document.getElementById('searchInput');
+    if(input) input.addEventListener('input', onSearchInput);
+    renderAccountsList();
+  }
+  if(state.ui.tab==='products'){
+    const input = document.getElementById('productSearchInput');
+    if(input) input.addEventListener('input', onProductSearchInput);
+    renderProductsReport();
+  }
+  if(state.ui.tab==='csms'){
+    renderCsmRequests();
+  }
+  const focused = document.querySelector('[data-autofocus]');
+  if(focused) focused.focus();
+}
+function tabBtn(id,label){ return `<button class="${state.ui.tab===id?'active':''}" onclick="setTab('${id}')">${label}</button>`; }
+
+function tabContent(){
+  if(state.ui.tab==='overview') return overviewHTML();
+  if(state.ui.tab==='accounts') return accountsHTML();
+  if(state.ui.tab==='territory') return territoryHTML();
+  if(state.ui.tab==='products') return productsHTML();
+  if(state.ui.tab==='csms') return csmsHTML();
+  if(state.ui.tab==='tasks') return tasksHTML();
+  return '';
+}
+
+/* ================= OVERVIEW ================= */
+function focusScore(a){
+  let score = 0;
+  if(a.status==='At Risk') score += 300;
+  if(a.priority==='High') score += 100;
+  if(a.status==='Renewal Upcoming') score += 60;
+  const d = daysUntil(a.renewalDate);
+  if(d!==null) score += Math.max(0, 90-d);
+  return score;
+}
+function overviewHTML(){
+  const accs = state.data.accounts;
+  const renew30 = accs.filter(a=> { const d=daysUntil(a.renewalDate); return d!==null && d>=0 && d<=30; }).length;
+  const atRisk = accs.filter(a=>a.status==='At Risk').length;
+  const tasksDue = state.data.tasks.filter(t=>!t.done && daysUntil(t.dueDate)!==null && daysUntil(t.dueDate)<=0).length;
+  const needsSF = state.data.tasks.filter(t=>t.done && !t.loggedToSF).length;
+  const csmFollowUps = state.data.csmRequests.filter(r=>r.status==='Open' && r.followUpDate && daysUntil(r.followUpDate)<=0).length;
+
+  const focus = [...accs].sort((a,b)=>focusScore(b)-focusScore(a)).slice(0,5);
+  const visits = accs.filter(a=>a.nextVisit).sort((a,b)=> a.nextVisit.localeCompare(b.nextVisit)).slice(0,5);
+  const weekTasks = state.data.tasks.filter(t=>!t.done && daysUntil(t.dueDate)!==null && daysUntil(t.dueDate)<=7)
+    .sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).slice(0,6);
+
+  return `
+    <div class="stat-grid">
+      <div class="stat" style="cursor:pointer;" onclick="goToAccounts()"><div class="num">${accs.length}</div><div class="lbl">Total accounts</div></div>
+      <div class="stat ${renew30>0?'flag-amber':''}" style="cursor:pointer;" onclick="goToAccounts({renewalSoon:true})"><div class="num">${renew30}</div><div class="lbl">Renewals in 30 days</div></div>
+      <div class="stat ${atRisk>0?'flag-red':''}" style="cursor:pointer;" onclick="goToAccounts({status:'At Risk'})"><div class="num">${atRisk}</div><div class="lbl">At-risk accounts</div></div>
+      <div class="stat ${tasksDue>0?'flag-red':''}" style="cursor:pointer;" onclick="setTab('tasks')"><div class="num">${tasksDue}</div><div class="lbl">Tasks due / overdue</div></div>
+      <div class="stat ${needsSF>0?'flag-amber':''}" style="cursor:pointer;" onclick="setTab('tasks')"><div class="num">${needsSF}</div><div class="lbl">Completed, not yet in Salesforce</div></div>
+      <div class="stat ${csmFollowUps>0?'flag-amber':''}" style="cursor:pointer;" onclick="setTab('csms')"><div class="num">${csmFollowUps}</div><div class="lbl">CSM follow-ups due</div></div>
+    </div>
+
+    <div class="section-title">Today's focus</div>
+    <div class="flist">
+      ${focus.length? focus.map(a=>focusRow(a)).join('') : `<div class="empty">No accounts yet.</div>`}
+    </div>
+
+    <div class="section-title">This week's tasks</div>
+    <div class="flist">
+      ${weekTasks.length? weekTasks.map(t=>taskMiniRow(t)).join('') : `<div class="empty">Nothing due this week.</div>`}
+    </div>
+    ${state.data.tasks.filter(t=>!t.done).length>weekTasks.length? `<div style="margin-top:6px;"><a class="linklike" onclick="setTab('tasks')">See all tasks →</a></div>`:''}
+    ${needsSF>0 ? `<div style="margin-top:4px;"><a class="linklike" onclick="setTab('tasks')">See ${needsSF} completed task${needsSF===1?'':'s'} to log in Salesforce →</a></div>` : ''}
+
+    <div class="section-title">Upcoming visits</div>
+    <div class="flist">
+      ${visits.length? visits.map(a=>visitMiniRow(a)).join('') : `<div class="empty">No visits scheduled — plan one from the Territory tab.</div>`}
+    </div>
+  `;
+}
+function focusRow(a){
+  const d = daysUntil(a.renewalDate);
+  return `<div class="frow" onclick="openAccountModal('${a.id}')">
+    <div class="fmain">
+      <div class="fname">${esc(a.name)}</div>
+      <div class="fmeta">${a.city}, ${a.state}</div>
+    </div>
+    <div class="fright">
+      <span class="badge ${statusClass(a.status)}">${a.status}</span>
+      ${d!==null? `<div class="fdays">${d<0?'Renewal passed':'Renews '+monthsLabel(a.renewalDate)}</div>`:''}
+    </div>
+  </div>`;
+}
+function taskMiniRow(t){
+  const overdue = daysUntil(t.dueDate)<0;
+  const acc = t.accountId ? getAccount(t.accountId) : null;
+  return `<div class="frow" onclick="setTab('tasks')">
+    <div class="fmain">
+      <div class="fname">${esc(t.title)}</div>
+      <div class="fmeta">${acc? esc(acc.name)+' · ':''}${niceDate(t.dueDate)}</div>
+    </div>
+    <div class="fright"><div class="fdays" style="color:${overdue?'#B5462F':'#A85F1E'}">${daysLabel(t.dueDate)}</div></div>
+  </div>`;
+}
+function visitMiniRow(a){
+  return `<div class="frow" onclick="setTab('territory')">
+    <div class="fmain">
+      <div class="fname">${esc(a.name)}</div>
+      <div class="fmeta">${a.city}, ${a.state}</div>
+    </div>
+    <div class="fright"><div class="fdays">${daysLabel(a.nextVisit)}</div></div>
+  </div>`;
+}
+
+/* ================= ACCOUNTS ================= */
+function accountsHTML(){
+  return `
+    ${state.ui.filterRenewalSoon ? `<div class="filter-bar"><span class="chip on" onclick="state.ui.filterRenewalSoon=false;renderAccountsList();">Renewals ≤30 days ✕</span></div>` : ''}
+    <input id="searchInput" placeholder="Search accounts by name or city…" value="${esc(state.ui.search)}" data-autofocus />
+    <div class="filter-bar">
+      ${['All',...STATES].map(s=>`<button class="chip ${state.ui.filterState===s?'on':''}" onclick="setFilter('filterState','${s}')">${s}</button>`).join('')}
+    </div>
+    <div class="filter-bar">
+      ${['All',...STATUSES].map(s=>`<button class="chip ${state.ui.filterStatus===s?'on':''}" onclick="setFilter('filterStatus','${s}')">${s}</button>`).join('')}
+    </div>
+    <button class="btn primary fab-add" style="margin-top:12px;" onclick="openAccountModal('new')">+ Add account</button>
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button class="btn small" style="flex:1;" onclick="openCsvImportModal()">Import CSV</button>
+      <button class="btn small" style="flex:1;" onclick="exportAccountsCsv()">Export CSV</button>
+    </div>
+    <div id="accountsListContainer" style="margin-top:14px;"></div>
+  `;
+}
+function onSearchInput(e){
+  state.ui.search = e.target.value;
+  renderAccountsList();
+}
+function setFilter(key,val){ state.ui[key]=val; renderAccountsList(); }
+function filteredAccounts(){
+  const q = state.ui.search.trim().toLowerCase();
+  return state.data.accounts.filter(a=>{
+    if(state.ui.filterState!=='All' && a.state!==state.ui.filterState) return false;
+    if(state.ui.filterStatus!=='All' && a.status!==state.ui.filterStatus) return false;
+    if(state.ui.filterRenewalSoon){ const d=daysUntil(a.renewalDate); if(!(d!==null && d>=0 && d<=30)) return false; }
+    if(q && !(a.name.toLowerCase().includes(q) || a.city.toLowerCase().includes(q))) return false;
+    return true;
+  }).sort((a,b)=>focusScore(b)-focusScore(a));
+}
+function renderAccountsList(){
+  const c = document.getElementById('accountsListContainer');
+  if(!c) return;
+  const list = filteredAccounts();
+  c.innerHTML = list.length ? list.map(a=>accountCard(a)).join('') : `<div class="empty">No accounts match.</div>`;
+}
+
+/* ================= CSV IMPORT / EXPORT ================= */
+const CSV_COLUMNS = ['Name','City','State','Address','Status','Priority','Renewal Date','CSM','Notes'];
+function csvEscape(val){
+  const s = (val==null ? '' : String(val));
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+}
+function accountsToCsv(){
+  const rows = [CSV_COLUMNS.join(',')];
+  state.data.accounts.forEach(a=>{
+    rows.push([a.name, a.city, a.state, a.address||'', a.status, a.priority, a.renewalDate||'', csmName(a.csmId), a.notes||''].map(csvEscape).join(','));
+  });
+  return rows.join('\n');
+}
+function exportAccountsCsv(){
+  const csv = accountsToCsv();
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'accounts.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function parseCsv(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c==='"'){
+        if(text[i+1]==='"'){ field+='"'; i++; } else { inQuotes=false; }
+      } else field += c;
+    } else {
+      if(c==='"') inQuotes = true;
+      else if(c===','){ row.push(field); field=''; }
+      else if(c==='\n' || c==='\r'){
+        if(c==='\r' && text[i+1]==='\n') i++;
+        row.push(field); field='';
+        if(row.length>1 || row[0]!==''){ rows.push(row); }
+        row = [];
+      } else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+  const headers = rows[0].map(h=>h.trim().toLowerCase());
+  return rows.slice(1).map(r=>{
+    const obj = {};
+    headers.forEach((h,i)=> obj[h] = (r[i]||'').trim());
+    return obj;
+  });
+}
+function openCsvImportModal(){ state.ui.modal = {type:'csvImport'}; state.ui.csvPreview=null; state.ui.csvError=null; render(); }
+function csvImportModal(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>Import accounts from CSV</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0;">
+        Columns (any order, only <b>Name</b> required): Name, City, State, Address, Status, Priority, Renewal Date (YYYY-MM-DD), CSM, Notes.
+        Matching by name updates that account — everything else (products, visits, marketing, planning) stays as-is. A new name creates a new account.
+      </p>
+      <div class="field"><label>Upload a CSV file</label><input type="file" accept=".csv,text/csv" onchange="handleCsvFile(this)" /></div>
+      <div class="field"><label>Or paste CSV text</label><textarea id="csvPasteArea" rows="6" placeholder="Name,City,State,Status,Priority,Renewal Date&#10;Crestline Ford,Frederick,MD,Healthy,High,2027-01-15"></textarea></div>
+      <button type="button" class="btn small" onclick="previewCsvFromTextarea()">Preview</button>
+      ${state.ui.csvError ? `<div style="color:var(--red);font-size:12.5px;margin-top:8px;">${esc(state.ui.csvError)}</div>` : ''}
+      ${state.ui.csvPreview ? `
+        <div style="font-size:13px;margin-top:12px;">${state.ui.csvPreview.length} row${state.ui.csvPreview.length===1?'':'s'} found — ${state.ui.csvPreview.filter(r=>r._existing).length} will update existing accounts, ${state.ui.csvPreview.filter(r=>!r._existing).length} will be added new.</div>
+        <button class="btn primary fab-add" style="margin-top:10px;" onclick="applyCsvImport()">Import ${state.ui.csvPreview.length} account${state.ui.csvPreview.length===1?'':'s'}</button>
+      ` : ''}
+    </div>
+  </div>`;
+}
+function handleCsvFile(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => { document.getElementById('csvPasteArea').value = e.target.result; previewCsvFromTextarea(); };
+  reader.readAsText(file);
+}
+function previewCsvFromTextarea(){
+  const text = document.getElementById('csvPasteArea').value;
+  if(!text.trim()){ state.ui.csvError = 'Paste or upload some CSV first.'; state.ui.csvPreview=null; render(); return; }
+  const rows = parseCsv(text);
+  const named = rows.filter(r=>r.name);
+  if(!named.length){ state.ui.csvError = "Couldn't find a Name column with values."; state.ui.csvPreview=null; render(); return; }
+  named.forEach(r=>{ r._existing = !!state.data.accounts.find(a=>a.name.toLowerCase()===r.name.toLowerCase()); });
+  state.ui.csvError = null;
+  state.ui.csvPreview = named;
+  render();
+}
+function applyCsvImport(){
+  const rows = state.ui.csvPreview || [];
+  rows.forEach(r=>{
+    const csm = r.csm ? state.data.csms.find(c=>c.name.toLowerCase()===r.csm.toLowerCase()) : null;
+    const fields = {
+      name: r.name,
+      city: r.city || '',
+      state: (r.state || 'MD').toUpperCase(),
+      address: r.address || '',
+      status: STATUSES.includes(r.status) ? r.status : 'Healthy',
+      priority: PRIORITIES.includes(r.priority) ? r.priority : 'Medium',
+      renewalDate: r['renewal date'] || null,
+      csmId: csm ? csm.id : null,
+      notes: r.notes || '',
+    };
+    const existing = state.data.accounts.find(a=>a.name.toLowerCase()===r.name.toLowerCase());
+    if(existing){ Object.assign(existing, fields); }
+    else { state.data.accounts.push({ id: uid(), address:'', nextVisit:null, notes:'', products:[], visitLog:[], marketing:[], csmId:null, planning:{}, ...fields }); }
+  });
+  save();
+  state.ui.modal = null;
+  state.ui.csvPreview = null;
+  render();
+}
+
+function productBadge(p){
+  return `<span class="badge vendor-${p.vendor}">${p.category}: ${esc(p.name)}</span>`;
+}
+function planningSummaryHTML(a){
+  const p = a.planning || {};
+  const filled = DEPARTMENTS.filter(d => p[d] && (p[d].strengths || p[d].weaknesses));
+  if(!filled.length) return '';
+  return `<div class="acct-details" style="margin-top:8px;">
+    <div style="font-weight:600;font-size:12.5px;margin-bottom:2px;">Account planning</div>
+    ${filled.map(d => `
+      <div style="margin-top:4px;">
+        <div style="font-weight:600;">${d}</div>
+        ${p[d].strengths ? `<div>+ ${esc(p[d].strengths)}</div>`:''}
+        ${p[d].weaknesses ? `<div>− ${esc(p[d].weaknesses)}</div>`:''}
+      </div>
+    `).join('')}
+  </div>`;
+}
+function accountCard(a){
+  const d = daysUntil(a.renewalDate);
+  const products = a.products || [];
+  const lastVisit = lastVisitDate(a);
+  const visitCount = (a.visitLog||[]).length;
+  const mktCount = (a.marketing||[]).length;
+  const lastMkt = mktCount ? [...a.marketing].sort((x,y)=>y.date.localeCompare(x.date))[0] : null;
+  return `<div class="acct-card">
+    <div class="acct-top" onclick="toggleExpand('${a.id}')" style="cursor:pointer;">
+      <div>
+        <div class="acct-name">${esc(a.name)}</div>
+        <div class="acct-loc">${a.city}, ${a.state}</div>
+        <div class="acct-badges">
+          <span class="badge ${statusClass(a.status)}">${a.status}</span>
+          <span class="badge priority-${a.priority}">${a.priority} priority</span>
+          ${products.map(p=>productBadge(p)).join('')}
+        </div>
+      </div>
+    </div>
+    ${state.ui.expanded===a.id ? `
+      <div class="acct-details">
+        <div>CSM: ${esc(csmName(a.csmId))}</div>
+        <div>Renewal: ${niceDate(a.renewalDate)} ${d!==null? '('+monthsLabel(a.renewalDate)+')':''}</div>
+        <div>Last visit: ${lastVisit? niceDate(lastVisit) : '—'} ${visitCount? `(${visitCount} visit${visitCount===1?'':'s'} logged)`:''}</div>
+        <div>Next visit: ${niceDate(a.nextVisit)}</div>
+        ${lastMkt ? `<div>Last marketing sent: ${esc(lastMkt.item)} · ${niceDate(lastMkt.date)}</div>` : ''}
+        ${a.notes? `<div style="margin-top:4px;">${esc(a.notes)}</div>`:''}
+      </div>
+      ${planningSummaryHTML(a)}
+      <div class="tip-box"><b>Engagement ideas · ${a.status}</b>${TIPS[a.status][0]}</div>
+      <div class="acct-actions">
+        <a class="btn small" href="${mapsSingleUrl(a)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">Directions</a>
+        <button class="btn small" onclick="event.stopPropagation();openAccountModal('${a.id}')">Edit</button>
+        <button class="btn small danger" onclick="event.stopPropagation();confirmDelete('account','${a.id}')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id===a.id ? 'Tap again to delete':'Delete'}</button>
+      </div>
+    ` : ''}
+  </div>`;
+}
+function toggleExpand(id){
+  state.ui.expanded = state.ui.expanded===id ? null : id;
+  renderAccountsList();
+}
+
+/* ================= TERRITORY ================= */
+function territoryHTML(){
+  const groups = STATES.map(st => ({ st, list: state.data.accounts.filter(a=>a.state===st).sort((a,b)=>{
+    if(!a.nextVisit && !b.nextVisit) return 0;
+    if(!a.nextVisit) return 1;
+    if(!b.nextVisit) return -1;
+    return a.nextVisit.localeCompare(b.nextVisit);
+  })})).filter(g=>g.list.length);
+
+  const sel = state.ui.routeSelection;
+  const selAccounts = sel.map(id=>getAccount(id)).filter(Boolean);
+  const routeBar = sel.length ? `
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px;position:sticky;top:112px;z-index:10;">
+      <div style="font-size:13px;font-weight:600;">${sel.length} stop${sel.length===1?'':'s'} selected for a route</div>
+      <div style="display:flex;gap:6px;">
+        <a class="btn amber small" href="${mapsRouteUrl(selAccounts)}" target="_blank" rel="noopener">Open in Google Maps</a>
+        <button class="btn ghost small" onclick="state.ui.routeSelection=[];render();">Clear</button>
+      </div>
+    </div>
+  ` : `<p style="font-size:12.5px;color:var(--muted-2);margin-top:0;">Check off a few stops below to build a driving route — it opens in real Google Maps with real drive times, free, no account needed.</p>`;
+
+  return routeBar + groups.map(g => `
+    <div class="state-group">
+      <div class="state-head"><h3>${g.st}</h3><span>${g.list.length} account${g.list.length===1?'':'s'}</span></div>
+      ${g.list.map(a=>visitRow(a)).join('')}
+    </div>
+  `).join('') || `<div class="empty">Add accounts first to plan your territory visits.</div>`;
+}
+function toggleRouteSelection(id){
+  const i = state.ui.routeSelection.indexOf(id);
+  if(i>=0) state.ui.routeSelection.splice(i,1); else state.ui.routeSelection.push(id);
+  render();
+}
+function visitRow(a){
+  const lastVisit = lastVisitDate(a);
+  const inRoute = state.ui.routeSelection.includes(a.id);
+  return `<div class="visit-row">
+    <div class="vtop">
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <input type="checkbox" style="width:17px;height:17px;margin-top:2px;accent-color:var(--amber-deep);" ${inRoute?'checked':''} onchange="toggleRouteSelection('${a.id}')" />
+        <div>
+          <div class="vname">${esc(a.name)}</div>
+          <div class="vmeta">${a.city} · <span class="badge ${statusClass(a.status)}">${a.status}</span></div>
+        </div>
+      </div>
+      ${!a.nextVisit? `<span class="unscheduled">Not scheduled</span>` : `<span style="font-size:11.5px;color:#5B6B62;">${daysLabel(a.nextVisit)}</span>`}
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px;">Last visit: ${lastVisit? niceDate(lastVisit) : 'none logged'}</div>
+    <div class="field" style="margin-top:6px;">
+      <label>Next visit (reschedule freely — nothing is lost)</label>
+      <input type="date" value="${a.nextVisit||''}" onchange="updateVisitDate('${a.id}','nextVisit',this.value)" />
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button class="btn small" onclick="logVisitToday('${a.id}')">Log visit today</button>
+      <a class="btn small ghost" href="${mapsSingleUrl(a)}" target="_blank" rel="noopener">Directions</a>
+    </div>
+  </div>`;
+}
+function updateVisitDate(id,field,val){
+  const a = getAccount(id);
+  a[field] = val || null;
+  save();
+}
+function logVisitToday(id){
+  const a = getAccount(id);
+  a.visitLog = a.visitLog || [];
+  a.visitLog.push({ id: uid(), date: fmtDate(today()), notes:'', loggedMileage:false });
+  save();
+  openAccountModal(id);
+}
+
+/* ================= PRODUCTS REPORT ================= */
+function allProductRows(){
+  const rows = [];
+  state.data.accounts.forEach(a=>{
+    (a.products||[]).forEach(p=>rows.push({ account: a, product: p }));
+  });
+  return rows;
+}
+function productStats(){
+  const rows = allProductRows();
+  const stat = (cat) => {
+    const inCat = rows.filter(r=>r.product.category===cat);
+    return {
+      ours: inCat.filter(r=>r.product.vendor==='CDK').length,
+      competitor: inCat.filter(r=>r.product.vendor==='Competitor').length
+    };
+  };
+  return { DMS: stat('DMS'), CRM: stat('CRM'), Service: stat('Service') };
+}
+function productsHTML(){
+  const stats = productStats();
+  const statCard = (label, s) => `
+    <div class="stat"><div class="num">${s.ours}</div><div class="lbl">Our ${label}</div></div>
+    <div class="stat ${s.competitor>0?'flag-red':''}"><div class="num">${s.competitor}</div><div class="lbl">Competing ${label}</div></div>
+  `;
+  return `
+    <div class="stat-grid">
+      ${statCard('DMS', stats.DMS)}
+      ${statCard('CRM', stats.CRM)}
+      ${statCard('Service', stats.Service)}
+    </div>
+
+    <input id="productSearchInput" placeholder="Search by product or account name…" value="${esc(state.ui.productSearch)}" style="margin-top:14px;" />
+    <div class="filter-bar">
+      ${['All',...PRODUCT_CATEGORIES].map(c=>`<button class="chip ${state.ui.filterProductCategory===c?'on':''}" onclick="setProductFilter('filterProductCategory','${c}')">${c}</button>`).join('')}
+    </div>
+    <div class="filter-bar">
+      ${['All',...VENDORS].map(v=>`<button class="chip ${state.ui.filterProductVendor===v?'on':''}" onclick="setProductFilter('filterProductVendor','${v}')">${v==='CDK'?'Ours':v==='Competitor'?'Competitor':'All'}</button>`).join('')}
+    </div>
+    <div id="productsReportContainer" style="margin-top:14px;"></div>
+  `;
+}
+function onProductSearchInput(e){ state.ui.productSearch = e.target.value; renderProductsReport(); }
+function setProductFilter(key,val){ state.ui[key]=val; renderProductsReport(); }
+function filteredProductRows(){
+  const q = state.ui.productSearch.trim().toLowerCase();
+  return allProductRows().filter(r=>{
+    if(state.ui.filterProductCategory!=='All' && r.product.category!==state.ui.filterProductCategory) return false;
+    if(state.ui.filterProductVendor!=='All' && r.product.vendor!==state.ui.filterProductVendor) return false;
+    if(q && !(r.product.name.toLowerCase().includes(q) || r.account.name.toLowerCase().includes(q))) return false;
+    return true;
+  }).sort((a,b)=>a.account.name.localeCompare(b.account.name));
+}
+function renderProductsReport(){
+  const c = document.getElementById('productsReportContainer');
+  if(!c) return;
+  const rows = filteredProductRows();
+  c.innerHTML = rows.length ? rows.map(r=>`
+    <div class="frow" onclick="state.ui.expanded='${r.account.id}'; setTab('accounts');">
+      <div class="fmain">
+        <div class="fname">${esc(r.account.name)}</div>
+        <div class="fmeta">${r.account.city}, ${r.account.state}</div>
+      </div>
+      <div class="fright">${productBadge(r.product)}</div>
+    </div>
+  `).join('') : `<div class="empty">No products match.</div>`;
+}
+
+/* ================= CSMs ================= */
+function getCsm(id){ return state.data.csms.find(c=>c.id===id); }
+function csmName(id){ const c=getCsm(id); return c? c.name : '— Unassigned —'; }
+function csmsHTML(){
+  const needsFollowUp = state.data.csmRequests.filter(r=>r.status==='Open' && r.followUpDate && daysUntil(r.followUpDate)<=0)
+    .sort((a,b)=>(a.followUpDate||'').localeCompare(b.followUpDate||''));
+
+  return `
+    <div class="section-title">Your CSMs (${state.data.csms.length})</div>
+    <div class="flist" style="margin-bottom:8px;">
+      ${state.data.csms.length ? state.data.csms.map(c=>{
+        const accCount = state.data.accounts.filter(a=>a.csmId===c.id).length;
+        const openCount = state.data.csmRequests.filter(r=>r.csmId===c.id && r.status==='Open').length;
+        return `<div class="frow" onclick="openCsmModal('${c.id}')">
+          <div class="fmain"><div class="fname">${esc(c.name)}</div><div class="fmeta">${accCount} account${accCount===1?'':'s'} · ${openCount} open request${openCount===1?'':'s'}</div></div>
+        </div>`;
+      }).join('') : `<div class="empty">No CSMs added yet.</div>`}
+    </div>
+    <button class="btn small" onclick="openCsmModal('new')">+ Add CSM</button>
+
+    ${needsFollowUp.length ? `
+      <div class="section-title" style="margin-top:22px;">Needs a follow-up email (${needsFollowUp.length})</div>
+      <div class="flist" style="margin-bottom:8px;">
+        ${needsFollowUp.map(r=>csmRequestRow(r)).join('')}
+      </div>
+    ` : ''}
+
+    <div class="section-title" style="margin-top:22px;">All requests</div>
+    <div class="filter-bar">
+      ${['All','Open','Completed'].map(s=>`<button class="chip ${state.ui.filterCsmStatus===s?'on':''}" onclick="setCsmFilter('${s}')">${s}</button>`).join('')}
+    </div>
+    <button class="btn primary fab-add" style="margin-top:10px;" onclick="openCsmRequestModal('new')">+ New request</button>
+    <div id="csmRequestsContainer" style="margin-top:14px;"></div>
+  `;
+}
+function setCsmFilter(status){ state.ui.filterCsmStatus = status; renderCsmRequests(); }
+function filteredCsmRequests(){
+  return state.data.csmRequests.filter(r=> state.ui.filterCsmStatus==='All' || r.status===state.ui.filterCsmStatus)
+    .sort((a,b)=>b.requestedDate.localeCompare(a.requestedDate));
+}
+function renderCsmRequests(){
+  const c = document.getElementById('csmRequestsContainer');
+  if(!c) return;
+  const list = filteredCsmRequests();
+  c.innerHTML = list.length ? list.map(r=>csmRequestRow(r)).join('') : `<div class="empty">No requests match.</div>`;
+}
+function csmRequestRow(r){
+  const acc = getAccount(r.accountId);
+  const daysOpen = daysUntil(r.requestedDate);
+  return `<div class="frow" onclick="openCsmRequestModal('${r.id}')">
+    <div class="fmain">
+      <div class="fname">${acc? esc(acc.name) : 'Unknown account'} ${r.type==='CSS Case' && r.caseNumber ? `<span style="color:var(--muted-2);font-weight:400;">· ${esc(r.caseNumber)}</span>`:''}</div>
+      <div class="fmeta">${esc(csmName(r.csmId))} · ${esc(r.description).slice(0,60)}${r.description.length>60?'…':''}</div>
+    </div>
+    <div class="fright">
+      <span class="badge ${r.status==='Open'?'At-Risk':'Healthy'}">${r.status}</span>
+      ${r.status==='Open' && daysOpen!==null ? `<div class="fdays">${Math.abs(daysOpen)} day${Math.abs(daysOpen)===1?'':'s'} open</div>`:''}
+    </div>
+  </div>`;
+}
+function openCsmModal(id){ state.ui.modal = {type:'csm', id}; render(); }
+function csmModal(){
+  const isNew = state.ui.modal.id==='new';
+  const c = isNew ? {name:'',email:''} : getCsm(state.ui.modal.id);
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>${isNew?'Add CSM':'Edit CSM'}</h2>
+      <div class="field"><label>Name</label><input id="csm_name" value="${esc(c.name)}" data-autofocus /></div>
+      <div class="field"><label>Email</label><input id="csm_email" value="${esc(c.email||'')}" placeholder="name@cdk.com" /></div>
+      <button class="btn primary fab-add" onclick="saveCsmForm('${isNew?'new':c.id}')">Save CSM</button>
+      ${!isNew ? `<button class="btn danger fab-add" style="margin-top:8px;" onclick="confirmDelete('csm','${c.id}')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id===c.id ? 'Tap again to delete':'Delete CSM'}</button>`:''}
+    </div>
+  </div>`;
+}
+function saveCsmForm(id){
+  const name = document.getElementById('csm_name').value.trim();
+  const email = document.getElementById('csm_email').value.trim();
+  if(!name){ document.getElementById('csm_name').style.borderColor='var(--red)'; return; }
+  if(id==='new'){
+    state.data.csms.push({ id: uid(), name, email });
+  } else {
+    const c = getCsm(id); c.name=name; c.email=email;
+  }
+  save();
+  state.ui.modal = null;
+  render();
+}
+function openCsmRequestModal(id){ state.ui.modal = {type:'csmRequest', id}; render(); }
+function csmRequestModal(){
+  const isNew = state.ui.modal.id==='new';
+  const r = isNew ? { accountId:'', csmId:'', type:'CSS Case', caseNumber:'', description:'', requestedDate: fmtDate(today()), status:'Open', completedDate:null, followUpDate: fmtDate(addDays(today(),5)) } : state.data.csmRequests.find(x=>x.id===state.ui.modal.id);
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>${isNew?'New CSM request':'Edit CSM request'}</h2>
+      <div class="field"><label>Account</label>
+        <select id="cr_account" onchange="prefillCsmFromAccount()"><option value="">— Select —</option>${state.data.accounts.map(a=>`<option value="${a.id}" ${r.accountId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>CSM</label>
+        <select id="cr_csm"><option value="">— Select —</option>${state.data.csms.map(c=>`<option value="${c.id}" ${r.csmId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Type</label><select id="cr_type" onchange="toggleCaseNumberField()">${CSM_REQUEST_TYPES.map(t=>`<option ${r.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field" id="cr_caseWrap" style="${r.type==='CSS Case'?'':'display:none;'}"><label>Case number</label><input id="cr_case" value="${esc(r.caseNumber||'')}" placeholder="CS-123456" /></div>
+      </div>
+      <div class="field"><label>What did you ask them to do?</label><textarea id="cr_desc" rows="3">${esc(r.description)}</textarea></div>
+      <div class="row2">
+        <div class="field"><label>Requested date</label><input type="date" id="cr_requested" value="${r.requestedDate||''}" /></div>
+        <div class="field"><label>Status</label><select id="cr_status" onchange="toggleCompletedField()">${['Open','Completed'].map(s=>`<option ${r.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="row2">
+        <div class="field" id="cr_completedWrap" style="${r.status==='Completed'?'':'display:none;'}"><label>Completed date</label><input type="date" id="cr_completed" value="${r.completedDate||''}" /></div>
+        <div class="field" id="cr_followUpWrap" style="${r.status==='Open'?'':'display:none;'}"><label>Remind me to follow up</label><input type="date" id="cr_followup" value="${r.followUpDate||''}" /></div>
+      </div>
+      <button class="btn primary fab-add" onclick="saveCsmRequestForm('${isNew?'new':r.id}')">Save request</button>
+      ${!isNew ? `<button class="btn danger fab-add" style="margin-top:8px;" onclick="confirmDelete('csmRequest','${r.id}')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id===r.id ? 'Tap again to delete':'Delete request'}</button>`:''}
+    </div>
+  </div>`;
+}
+function prefillCsmFromAccount(){
+  const accId = document.getElementById('cr_account').value;
+  const a = getAccount(accId);
+  if(a && a.csmId) document.getElementById('cr_csm').value = a.csmId;
+}
+function toggleCaseNumberField(){
+  const type = document.getElementById('cr_type').value;
+  document.getElementById('cr_caseWrap').style.display = type==='CSS Case' ? '' : 'none';
+}
+function toggleCompletedField(){
+  const status = document.getElementById('cr_status').value;
+  document.getElementById('cr_completedWrap').style.display = status==='Completed' ? '' : 'none';
+  document.getElementById('cr_followUpWrap').style.display = status==='Open' ? '' : 'none';
+  if(status==='Completed' && !document.getElementById('cr_completed').value){
+    document.getElementById('cr_completed').value = fmtDate(today());
+  }
+}
+function saveCsmRequestForm(id){
+  const vals = {
+    accountId: document.getElementById('cr_account').value || null,
+    csmId: document.getElementById('cr_csm').value || null,
+    type: document.getElementById('cr_type').value,
+    caseNumber: document.getElementById('cr_case') ? document.getElementById('cr_case').value.trim() : '',
+    description: document.getElementById('cr_desc').value.trim(),
+    requestedDate: document.getElementById('cr_requested').value || null,
+    status: document.getElementById('cr_status').value,
+    completedDate: document.getElementById('cr_completed').value || null,
+    followUpDate: document.getElementById('cr_followup') ? (document.getElementById('cr_followup').value || null) : null,
+  };
+  if(!vals.accountId || !vals.csmId){ return; }
+  if(id==='new'){
+    state.data.csmRequests.push({ id: uid(), ...vals });
+  } else {
+    Object.assign(state.data.csmRequests.find(x=>x.id===id), vals);
+  }
+  save();
+  state.ui.modal = null;
+  render();
+}
+
+/* ================= TASKS ================= */
+function tasksHTML(){
+  const open = state.data.tasks.filter(t=>!t.done);
+  const doneAll = state.data.tasks.filter(t=>t.done).sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||''));
+  const needsLog = doneAll.filter(t=>!t.loggedToSF);
+  const logged = doneAll.filter(t=>t.loggedToSF);
+  const overdue = open.filter(t=>daysUntil(t.dueDate)<0).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const soon = open.filter(t=>daysUntil(t.dueDate)>=0 && daysUntil(t.dueDate)<=7).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const later = open.filter(t=>daysUntil(t.dueDate)>7 || t.dueDate==null).sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+
+  return `
+    <button class="btn primary fab-add" onclick="openTaskModal('new')">+ Add task</button>
+    ${taskGroup('Overdue', overdue)}
+    ${taskGroup('Due this week', soon)}
+    ${taskGroup('Later', later)}
+    ${needsLog.length? `
+      <div class="task-group">
+        <div class="section-title">Completed — log in Salesforce (${needsLog.length})</div>
+        ${needsLog.map(t=>taskRow(t)).join('')}
+      </div>
+    `: ''}
+    ${logged.length? `
+      <div class="task-group">
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>Logged to Salesforce (${logged.length})</span>
+          <a class="linklike" style="font-size:12px;" onclick="confirmDelete('clearCompleted','all')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id==='all' ? 'Tap again to clear':'Clear these'}</a>
+        </div>
+        ${logged.map(t=>taskRow(t)).join('')}
+      </div>
+    `: ''}
+  `;
+}
+function taskGroup(title, list){
+  if(!list.length) return '';
+  return `<div class="task-group">
+    <div class="section-title">${title}</div>
+    ${list.map(t=>taskRow(t)).join('')}
+  </div>`;
+}
+function taskRow(t){
+  const acc = t.accountId? getAccount(t.accountId): null;
+  const overdue = !t.done && daysUntil(t.dueDate)<0;
+  const meta = t.done
+    ? `${acc? esc(acc.name)+' · ':''}Completed ${t.completedAt? niceDate(t.completedAt) : '— date not recorded'}`
+    : `${acc? esc(acc.name)+' · ':''}${t.dueDate? niceDate(t.dueDate)+' · '+daysLabel(t.dueDate) : 'No due date'} · ${t.priority}`;
+  const sfToggle = t.done ? `
+    <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin-top:5px;" onclick="event.stopPropagation();">
+      <input type="checkbox" style="width:14px;height:14px;accent-color:var(--amber-deep);" ${t.loggedToSF?'checked':''} onchange="toggleLoggedSF('${t.id}')" />
+      Logged to Salesforce
+    </label>` : '';
+  return `<div class="task-row ${t.done?'done':''}">
+    <input type="checkbox" ${t.done?'checked':''} onchange="toggleTask('${t.id}')" />
+    <div class="task-main" onclick="openTaskModal('${t.id}')">
+      <div class="task-title">${esc(t.title)}</div>
+      <div class="task-meta ${overdue?'overdue':''}">${meta}</div>
+      ${sfToggle}
+    </div>
+    <button class="btn ghost small" onclick="confirmDelete('task','${t.id}')">${state.ui.deleteConfirm && state.ui.deleteConfirm.id===t.id ? 'Confirm?':'✕'}</button>
+  </div>`;
+}
+function toggleTask(id){
+  const t = state.data.tasks.find(x=>x.id===id);
+  t.done = !t.done;
+  t.completedAt = t.done ? fmtDate(today()) : null;
+  if(!t.done) t.loggedToSF = false;
+  save(); render();
+}
+function toggleLoggedSF(id){
+  const t = state.data.tasks.find(x=>x.id===id);
+  t.loggedToSF = !t.loggedToSF;
+  save(); render();
+}
+
+/* ================= DELETE CONFIRM (no native dialogs) ================= */
+function confirmDelete(type,id){
+  if(state.ui.deleteConfirm && state.ui.deleteConfirm.type===type && state.ui.deleteConfirm.id===id){
+    if(type==='account') state.data.accounts = state.data.accounts.filter(a=>a.id!==id);
+    if(type==='task') state.data.tasks = state.data.tasks.filter(t=>t.id!==id);
+    if(type==='clearCompleted') state.data.tasks = state.data.tasks.filter(t=>!t.done);
+    if(type==='csm'){
+      state.data.csms = state.data.csms.filter(c=>c.id!==id);
+      state.data.accounts.forEach(a=>{ if(a.csmId===id) a.csmId=null; });
+      state.ui.modal = null;
+    }
+    if(type==='csmRequest'){ state.data.csmRequests = state.data.csmRequests.filter(r=>r.id!==id); state.ui.modal = null; }
+    state.ui.deleteConfirm = null;
+    save(); render();
+  } else {
+    state.ui.deleteConfirm = {type,id};
+    if(type==='account') renderAccountsList(); else render();
+    setTimeout(()=>{ if(state.ui.deleteConfirm && state.ui.deleteConfirm.id===id){ state.ui.deleteConfirm=null; if(type==='account') renderAccountsList(); else render(); } }, 3000);
+  }
+}
+
+/* ================= MODALS ================= */
+function openAccountModal(id){ state.ui.modal = {type:'account', id}; render(); }
+function openTaskModal(id){ state.ui.modal = {type:'task', id}; render(); }
+function closeModal(){ state.ui.modal = null; render(); }
+
+function modalHTML(){
+  if(!state.ui.modal) return '';
+  if(state.ui.modal.type==='account') return accountModal();
+  if(state.ui.modal.type==='task') return taskModal();
+  if(state.ui.modal.type==='backup') return backupModal();
+  if(state.ui.modal.type==='csm') return csmModal();
+  if(state.ui.modal.type==='csmRequest') return csmRequestModal();
+  if(state.ui.modal.type==='csvImport') return csvImportModal();
+  return '';
+}
+function openBackupModal(){ state.ui.modal = {type:'backup'}; state.ui.backupError=null; render(); }
+function backupModal(){
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>Backup</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:0;">
+        Your data syncs automatically — sign into this same link with your email on any device, and it's already there. This is just an optional local copy for your own records.
+      </p>
+      <p style="font-size:12px;color:var(--muted-2);">Last synced: ${niceDateTime(state.data.updatedAt)}</p>
+      <button class="btn primary fab-add" onclick="downloadBackup()">Save a backup file</button>
+
+      <div class="section-title" style="margin-top:16px;">Restore from a backup file</div>
+      <div class="field">
+        <input type="file" accept="application/json" onchange="restoreBackup(this)" />
+      </div>
+      <p style="font-size:12px;color:var(--muted-2);margin:0;">Only needed if you're recovering from an old export — not part of normal use.</p>
+
+      ${state.ui.pendingRestore ? `
+        <div style="background:var(--amber-bg);border-radius:8px;padding:11px;margin:10px 0;">
+          <div style="font-size:12.5px;color:#6B4A1E;">This file is older (${niceDateTime(state.ui.pendingRestore.updatedAt)}) than what's currently synced. Loading it will overwrite the newer data.</div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn small danger" onclick="applyRestore(state.ui.pendingRestore)">Load anyway</button>
+            <button class="btn small" onclick="cancelRestore()">Cancel</button>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.ui.backupError ? `<div style="color:var(--red);font-size:12.5px;margin-top:8px;">${esc(state.ui.backupError)}</div>` : ''}
+    </div>
+  </div>`;
+}
+let editingProducts = [];
+let editingVisits = [];
+let editingMarketing = [];
+function accountModal(){
+  const isNew = state.ui.modal.id==='new';
+  const a = isNew ? { name:'',city:'',state:'MD',address:'',status:'Healthy',priority:'Medium',renewalDate:'',nextVisit:'',notes:'',products:[],visitLog:[],marketing:[],csmId:null,planning:{} } : getAccount(state.ui.modal.id);
+  editingProducts = (a.products || []).map(p=>({...p}));
+  editingVisits = (a.visitLog || []).map(v=>({...v}));
+  editingMarketing = (a.marketing || []).map(m=>({...m}));
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>${isNew?'Add account':'Edit account'}</h2>
+      <div class="field"><label>Dealer / account name</label><input id="f_name" value="${esc(a.name)}" data-autofocus /></div>
+      <div class="row2">
+        <div class="field"><label>City</label><input id="f_city" value="${esc(a.city)}" /></div>
+        <div class="field"><label>State</label><select id="f_state">${STATES.map(s=>`<option ${a.state===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Street address (for directions — optional, falls back to city/state)</label><input id="f_address" value="${esc(a.address||'')}" placeholder="123 Main St, Frederick, MD 21701" /></div>
+      <div class="field"><label>CSM assigned</label>
+        <select id="f_csm"><option value="">— Unassigned —</option>${state.data.csms.map(c=>`<option value="${c.id}" ${a.csmId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Status</label><select id="f_status">${STATUSES.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Priority</label><select id="f_priority">${PRIORITIES.map(p=>`<option ${a.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Renewal date</label><input type="date" id="f_renewal" value="${a.renewalDate||''}" /></div>
+        <div class="field"><label>Next visit (plan — reschedule anytime)</label><input type="date" id="f_next" value="${a.nextVisit||''}" /></div>
+      </div>
+      <div class="field"><label>Notes / engagement plan</label><textarea id="f_notes" rows="3">${esc(a.notes)}</textarea></div>
+
+      <div class="section-title">Account planning</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Strengths and weaknesses by department — use this to prep for reviews and find the next opening.</p>
+      ${DEPARTMENTS.map(dept => `
+        <div style="font-size:13px;font-weight:600;margin:12px 0 6px;">${dept}</div>
+        <div class="field"><label>Strengths</label><textarea id="f_plan_${dept}_s" rows="2">${esc((a.planning && a.planning[dept] && a.planning[dept].strengths) || '')}</textarea></div>
+        <div class="field"><label>Weaknesses</label><textarea id="f_plan_${dept}_w" rows="2">${esc((a.planning && a.planning[dept] && a.planning[dept].weaknesses) || '')}</textarea></div>
+      `).join('')}
+
+      <div class="section-title">Products they have</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Log their DMS, CRM, Service, and anything else worth tracking — ours or a competitor's.</p>
+      <div id="productsListEditor">${productsListEditorHTML()}</div>
+      <div class="row2" style="margin-top:6px;">
+        <div class="field"><label>Category</label><select id="np_cat">${PRODUCT_CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Vendor</label><select id="np_vendor">${VENDORS.map(v=>`<option>${v}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Product name</label><input id="np_name" placeholder="e.g. CDK CRM, VinSolutions, Xtime…" /></div>
+      <button type="button" class="btn small" onclick="addEditingProduct()">+ Add product</button>
+
+      <div class="section-title">Visit history</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Every completed visit stays here permanently — use it to log mileage into your reimbursement app.</p>
+      <div id="visitsListEditor">${visitsListEditorHTML()}</div>
+      <div class="row2" style="margin-top:6px;">
+        <div class="field"><label>Date</label><input type="date" id="nv_date" value="${fmtDate(today())}" /></div>
+      </div>
+      <div class="field"><label>Notes</label><input id="nv_notes" placeholder="What happened on this visit…" /></div>
+      <button type="button" class="btn small" onclick="addEditingVisit()">+ Add visit</button>
+
+      <div class="section-title">Marketing sent</div>
+      <p style="font-size:12px;color:var(--muted-2);margin:-4px 0 8px;">Track what you've sent them — flyers, one-pagers, promos.</p>
+      <div id="marketingListEditor">${marketingListEditorHTML()}</div>
+      <div class="row2" style="margin-top:6px;">
+        <div class="field"><label>Date</label><input type="date" id="nm_date" value="${fmtDate(today())}" /></div>
+        <div class="field"><label>Item sent</label><input id="nm_item" placeholder="e.g. Q4 promo flyer" /></div>
+      </div>
+      <button type="button" class="btn small" onclick="addEditingMarketing()">+ Add marketing entry</button>
+
+      <button class="btn primary fab-add" style="margin-top:16px;" onclick="saveAccountForm('${isNew?'new':a.id}')">Save account</button>
+    </div>
+  </div>`;
+}
+function productsListEditorHTML(){
+  if(!editingProducts.length) return `<div class="empty" style="padding:4px 0;">No products logged yet.</div>`;
+  return editingProducts.map((p,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft);">
+      <span class="badge vendor-${p.vendor}">${p.category}: ${esc(p.name)}</span>
+      <button type="button" class="btn ghost small" onclick="removeEditingProduct(${i})">✕</button>
+    </div>
+  `).join('');
+}
+function addEditingProduct(){
+  const cat = document.getElementById('np_cat').value;
+  const vendor = document.getElementById('np_vendor').value;
+  const name = document.getElementById('np_name').value.trim();
+  if(!name) return;
+  editingProducts.push({ id: uid(), category: cat, name, vendor });
+  document.getElementById('np_name').value = '';
+  document.getElementById('productsListEditor').innerHTML = productsListEditorHTML();
+}
+function visitsListEditorHTML(){
+  if(!editingVisits.length) return `<div class="empty" style="padding:4px 0;">No visits logged yet.</div>`;
+  return [...editingVisits].sort((a,b)=>b.date.localeCompare(a.date)).map((v)=>{
+    const i = editingVisits.indexOf(v);
+    return `
+    <div style="padding:7px 0;border-bottom:1px solid var(--line-soft);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div>
+          <div style="font-weight:600;font-size:13px;">${niceDate(v.date)}</div>
+          ${v.notes? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${esc(v.notes)}</div>`:''}
+        </div>
+        <button type="button" class="btn ghost small" onclick="removeEditingVisit(${i})">✕</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin-top:5px;">
+        <input type="checkbox" style="width:14px;height:14px;accent-color:var(--amber-deep);" ${v.loggedMileage?'checked':''} onchange="toggleEditingVisitLogged(${i})" />
+        Logged in mileage app
+      </label>
+    </div>
+  `;}).join('');
+}
+function addEditingVisit(){
+  const date = document.getElementById('nv_date').value || fmtDate(today());
+  const notes = document.getElementById('nv_notes').value.trim();
+  editingVisits.push({ id: uid(), date, notes, loggedMileage:false });
+  document.getElementById('nv_notes').value = '';
+  document.getElementById('visitsListEditor').innerHTML = visitsListEditorHTML();
+}
+function removeEditingVisit(i){
+  editingVisits.splice(i,1);
+  document.getElementById('visitsListEditor').innerHTML = visitsListEditorHTML();
+}
+function toggleEditingVisitLogged(i){
+  editingVisits[i].loggedMileage = !editingVisits[i].loggedMileage;
+  document.getElementById('visitsListEditor').innerHTML = visitsListEditorHTML();
+}
+function marketingListEditorHTML(){
+  if(!editingMarketing.length) return `<div class="empty" style="padding:4px 0;">Nothing logged yet.</div>`;
+  return [...editingMarketing].sort((a,b)=>b.date.localeCompare(a.date)).map((m)=>{
+    const i = editingMarketing.indexOf(m);
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft);">
+      <div style="font-size:13px;">${esc(m.item)} <span style="color:var(--muted-2);font-size:11.5px;">· ${niceDate(m.date)}</span></div>
+      <button type="button" class="btn ghost small" onclick="removeEditingMarketing(${i})">✕</button>
+    </div>
+  `;}).join('');
+}
+function addEditingMarketing(){
+  const date = document.getElementById('nm_date').value || fmtDate(today());
+  const item = document.getElementById('nm_item').value.trim();
+  if(!item) return;
+  editingMarketing.push({ id: uid(), date, item });
+  document.getElementById('nm_item').value = '';
+  document.getElementById('marketingListEditor').innerHTML = marketingListEditorHTML();
+}
+function removeEditingMarketing(i){
+  editingMarketing.splice(i,1);
+  document.getElementById('marketingListEditor').innerHTML = marketingListEditorHTML();
+}
+function removeEditingProduct(i){
+  editingProducts.splice(i,1);
+  document.getElementById('productsListEditor').innerHTML = productsListEditorHTML();
+}
+function saveAccountForm(id){
+  const planning = {};
+  DEPARTMENTS.forEach(dept=>{
+    planning[dept] = {
+      strengths: document.getElementById(`f_plan_${dept}_s`).value.trim(),
+      weaknesses: document.getElementById(`f_plan_${dept}_w`).value.trim(),
+    };
+  });
+  const vals = {
+    name: document.getElementById('f_name').value.trim(),
+    city: document.getElementById('f_city').value.trim(),
+    state: document.getElementById('f_state').value,
+    address: document.getElementById('f_address').value.trim(),
+    csmId: document.getElementById('f_csm').value || null,
+    status: document.getElementById('f_status').value,
+    priority: document.getElementById('f_priority').value,
+    renewalDate: document.getElementById('f_renewal').value || null,
+    nextVisit: document.getElementById('f_next').value || null,
+    notes: document.getElementById('f_notes').value.trim(),
+    products: editingProducts,
+    visitLog: editingVisits,
+    marketing: editingMarketing,
+    planning: planning,
+  };
+  if(!vals.name){ document.getElementById('f_name').style.borderColor = 'var(--red)'; return; }
+  if(id==='new'){
+    state.data.accounts.push({ id: uid(), ...vals });
+  } else {
+    Object.assign(getAccount(id), vals);
+  }
+  save();
+  state.ui.modal = null;
+  render();
+}
+function taskModal(){
+  const isNew = state.ui.modal.id==='new';
+  const t = isNew ? { title:'', accountId:'', dueDate:'', priority:'Medium', done:false } : state.data.tasks.find(x=>x.id===state.ui.modal.id);
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>${isNew?'Add task':'Edit task'}</h2>
+      <div class="field"><label>Task</label><input id="t_title" value="${esc(t.title)}" data-autofocus /></div>
+      <div class="field"><label>Related account (optional)</label>
+        <select id="t_account"><option value="">— None —</option>${state.data.accounts.map(a=>`<option value="${a.id}" ${t.accountId===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Due date</label><input type="date" id="t_due" value="${t.dueDate||''}" /></div>
+        <div class="field"><label>Priority</label><select id="t_priority">${PRIORITIES.map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      </div>
+      <button class="btn primary fab-add" onclick="saveTaskForm('${isNew?'new':t.id}')">Save task</button>
+    </div>
+  </div>`;
+}
+function saveTaskForm(id){
+  const vals = {
+    title: document.getElementById('t_title').value.trim(),
+    accountId: document.getElementById('t_account').value || null,
+    dueDate: document.getElementById('t_due').value || null,
+    priority: document.getElementById('t_priority').value,
+  };
+  if(!vals.title){ document.getElementById('t_title').style.borderColor='var(--red)'; return; }
+  if(id==='new'){
+    state.data.tasks.push({ id: uid(), done:false, loggedToSF:false, ...vals });
+  } else {
+    Object.assign(state.data.tasks.find(x=>x.id===id), vals);
+  }
+  save();
+  state.ui.modal = null;
+  render();
+}
+
+function esc(s){ const d=document.createElement('div'); d.innerText = s==null? '' : s; return d.innerHTML; }
+
+load();
+</script>
+</body>
+</html>
