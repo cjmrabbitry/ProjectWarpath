@@ -532,7 +532,7 @@ function authScreenHTML(mode, errorMsg){
           <img src="data:image/png;base64,${LOGO_B64}" alt="Rainbows and Revenue" style="width:130px;height:130px;display:block;margin:0 auto 14px;
             filter:drop-shadow(0 8px 18px rgba(180,123,51,0.25));" />
           <h1 style="font-family:Georgia, 'Iowan Old Style', 'Times New Roman', serif;font-style:italic;font-size:15px;color:var(--muted);
-            margin:0 0 24px;font-weight:400;">Let's make some magic (and quota) happen ✨</h1>
+            margin:0 0 24px;font-weight:400;">${mode==='signup' ? "Welcome! Let's set you up ✨" : "Let's make some magic (and quota) happen ✨"}</h1>
           <div class="field" style="text-align:left;">
             <label>Email</label>
             <input id="auth_email" type="email" data-autofocus />
@@ -542,7 +542,12 @@ function authScreenHTML(mode, errorMsg){
             <input id="auth_password" type="password" placeholder="••••••••" />
           </div>
           ${errorMsg ? `<div style="color:var(--red);font-size:12.5px;margin-bottom:10px;">${esc(errorMsg)}</div>` : ''}
-          <button class="btn primary fab-add auth-cute-btn" onclick="doSignIn()">Let's go 🌈</button>
+          <button class="btn primary fab-add auth-cute-btn" onclick="${mode==='signup' ? 'doSignUp()' : 'doSignIn()'}">${mode==='signup' ? 'Create account 🎉' : "Let's go 🌈"}</button>
+          <p style="font-size:12px;color:var(--muted-2);margin-top:14px;">
+            ${mode==='signup'
+              ? `Already set up? <a class="linklike" onclick="renderAuthScreen('signin')">Sign in</a>`
+              : `New here? <a class="linklike" onclick="renderAuthScreen('signup')">Create an account</a>`}
+          </p>
         </div>
         <p style="text-align:center;font-size:11px;color:var(--muted-2);margin-top:16px;">just you, your accounts, and a little sparkle</p>
       </div>
