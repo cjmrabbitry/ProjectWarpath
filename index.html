@@ -1007,12 +1007,8 @@ function accountsHTML(){
     ${state.ui.filterRenewalSoon ? `<div class="filter-bar"><span class="chip on" onclick="state.ui.filterRenewalSoon=false;renderAccountsList();">Renewals ≤30 days ✕</span></div>` : ''}
     ${state.ui.filterStale ? `<div class="filter-bar"><span class="chip on" onclick="state.ui.filterStale=false;renderAccountsList();">No contact ${STALE_DAYS}+ days ✕</span></div>` : ''}
     <input id="searchInput" placeholder="Search accounts by name or city…" value="${esc(state.ui.search)}" data-autofocus />
-    <div class="filter-bar">
-      ${['All',...STATES].map(s=>`<button class="chip ${s==='All'? (state.ui.filterStates.length===0?'on':'') : (state.ui.filterStates.includes(s)?'on':'')}" onclick="toggleStateFilter('${s}')">${s}</button>`).join('')}
-    </div>
-    <div class="filter-bar">
-      ${['All',...STATUSES].map(s=>`<button class="chip ${s==='All'? (state.ui.filterStatuses.length===0?'on':'') : (state.ui.filterStatuses.includes(s)?'on':'')}" onclick="toggleStatusFilter('${s}')">${s}</button>`).join('')}
-    </div>
+    <div class="filter-bar" id="stateFilterBar">${stateFilterBarHTML()}</div>
+    <div class="filter-bar" id="statusFilterBar">${statusFilterBarHTML()}</div>
     <button class="btn primary fab-add" style="margin-top:12px;" onclick="openAccountModal('new')">+ Add account</button>
     <div style="display:flex;gap:6px;margin-top:8px;">
       <button class="btn small" style="flex:1;" onclick="openCsvImportModal()">Import CSV</button>
@@ -1025,12 +1021,20 @@ function onSearchInput(e){
   state.ui.search = e.target.value;
   renderAccountsList();
 }
+function stateFilterBarHTML(){
+  return ['All',...STATES].map(s=>`<button class="chip ${s==='All'? (state.ui.filterStates.length===0?'on':'') : (state.ui.filterStates.includes(s)?'on':'')}" onclick="toggleStateFilter('${s}')">${s}</button>`).join('');
+}
+function statusFilterBarHTML(){
+  return ['All',...STATUSES].map(s=>`<button class="chip ${s==='All'? (state.ui.filterStatuses.length===0?'on':'') : (state.ui.filterStatuses.includes(s)?'on':'')}" onclick="toggleStatusFilter('${s}')">${s}</button>`).join('');
+}
 function toggleStateFilter(s){
   if(s==='All'){ state.ui.filterStates = []; }
   else {
     const i = state.ui.filterStates.indexOf(s);
     if(i>=0) state.ui.filterStates.splice(i,1); else state.ui.filterStates.push(s);
   }
+  const bar = document.getElementById('stateFilterBar');
+  if(bar) bar.innerHTML = stateFilterBarHTML();
   renderAccountsList();
 }
 function toggleStatusFilter(s){
@@ -1039,6 +1043,8 @@ function toggleStatusFilter(s){
     const i = state.ui.filterStatuses.indexOf(s);
     if(i>=0) state.ui.filterStatuses.splice(i,1); else state.ui.filterStatuses.push(s);
   }
+  const bar = document.getElementById('statusFilterBar');
+  if(bar) bar.innerHTML = statusFilterBarHTML();
   renderAccountsList();
 }
 function filteredAccounts(){
@@ -1502,14 +1508,16 @@ function productsHTML(){
     </div>
 
     <input id="productSearchInput" placeholder="Search by product or account name…" value="${esc(state.ui.productSearch)}" style="margin-top:14px;" />
-    <div class="filter-bar">
-      ${['All',...PRODUCT_CATEGORIES].map(c=>`<button class="chip ${c==='All'? (state.ui.filterProductCategories.length===0?'on':'') : (state.ui.filterProductCategories.includes(c)?'on':'')}" onclick="toggleProductCategoryFilter('${c}')">${c}</button>`).join('')}
-    </div>
-    <div class="filter-bar">
-      ${['All',...VENDORS].map(v=>`<button class="chip ${v==='All'? (state.ui.filterProductVendors.length===0?'on':'') : (state.ui.filterProductVendors.includes(v)?'on':'')}" onclick="toggleProductVendorFilter('${v}')">${v==='CDK'?'Ours':v==='Competitor'?'Competitor':'All'}</button>`).join('')}
-    </div>
+    <div class="filter-bar" id="productCategoryFilterBar">${productCategoryFilterBarHTML()}</div>
+    <div class="filter-bar" id="productVendorFilterBar">${productVendorFilterBarHTML()}</div>
     <div id="productsReportContainer" style="margin-top:14px;"></div>
   `;
+}
+function productCategoryFilterBarHTML(){
+  return ['All',...PRODUCT_CATEGORIES].map(c=>`<button class="chip ${c==='All'? (state.ui.filterProductCategories.length===0?'on':'') : (state.ui.filterProductCategories.includes(c)?'on':'')}" onclick="toggleProductCategoryFilter('${c}')">${c}</button>`).join('');
+}
+function productVendorFilterBarHTML(){
+  return ['All',...VENDORS].map(v=>`<button class="chip ${v==='All'? (state.ui.filterProductVendors.length===0?'on':'') : (state.ui.filterProductVendors.includes(v)?'on':'')}" onclick="toggleProductVendorFilter('${v}')">${v==='CDK'?'Ours':v==='Competitor'?'Competitor':'All'}</button>`).join('');
 }
 function onProductSearchInput(e){ state.ui.productSearch = e.target.value; renderProductsReport(); }
 function toggleProductCategoryFilter(c){
@@ -1518,6 +1526,8 @@ function toggleProductCategoryFilter(c){
     const i = state.ui.filterProductCategories.indexOf(c);
     if(i>=0) state.ui.filterProductCategories.splice(i,1); else state.ui.filterProductCategories.push(c);
   }
+  const bar = document.getElementById('productCategoryFilterBar');
+  if(bar) bar.innerHTML = productCategoryFilterBarHTML();
   renderProductsReport();
 }
 function toggleProductVendorFilter(v){
@@ -1526,6 +1536,8 @@ function toggleProductVendorFilter(v){
     const i = state.ui.filterProductVendors.indexOf(v);
     if(i>=0) state.ui.filterProductVendors.splice(i,1); else state.ui.filterProductVendors.push(v);
   }
+  const bar = document.getElementById('productVendorFilterBar');
+  if(bar) bar.innerHTML = productVendorFilterBarHTML();
   renderProductsReport();
 }
 function filteredProductRows(){
@@ -1580,14 +1592,20 @@ function csmsHTML(){
     ` : ''}
 
     <div class="section-title" style="margin-top:22px;">All requests</div>
-    <div class="filter-bar">
-      ${['All','Open','Completed'].map(s=>`<button class="chip ${state.ui.filterCsmStatus===s?'on':''}" onclick="setCsmFilter('${s}')">${s}</button>`).join('')}
-    </div>
+    <div class="filter-bar" id="csmStatusFilterBar">${csmStatusFilterBarHTML()}</div>
     <button class="btn primary fab-add" style="margin-top:10px;" onclick="openCsmRequestModal('new')">+ New request</button>
     <div id="csmRequestsContainer" style="margin-top:14px;"></div>
   `;
 }
-function setCsmFilter(status){ state.ui.filterCsmStatus = status; renderCsmRequests(); }
+function csmStatusFilterBarHTML(){
+  return ['All','Open','Completed'].map(s=>`<button class="chip ${state.ui.filterCsmStatus===s?'on':''}" onclick="setCsmFilter('${s}')">${s}</button>`).join('');
+}
+function setCsmFilter(status){
+  state.ui.filterCsmStatus = status;
+  const bar = document.getElementById('csmStatusFilterBar');
+  if(bar) bar.innerHTML = csmStatusFilterBarHTML();
+  renderCsmRequests();
+}
 function filteredCsmRequests(){
   return state.data.csmRequests.filter(r=> state.ui.filterCsmStatus==='All' || r.status===state.ui.filterCsmStatus)
     .sort((a,b)=>b.requestedDate.localeCompare(a.requestedDate));
