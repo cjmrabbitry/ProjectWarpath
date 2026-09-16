@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Warpath</title>
+<title>Rainbows and Winnings</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -466,7 +466,7 @@ async function signOut(){
 function authScreenHTML(mode, errorMsg){
   return `
     <div style="max-width:360px;margin:80px auto;padding:0 20px;">
-      <h1 style="font-family:Georgia, 'Iowan Old Style', 'Times New Roman', serif;font-size:26px;margin-bottom:4px;">Warpath</h1>
+      <h1 style="font-family:Georgia, 'Iowan Old Style', 'Times New Roman', serif;font-size:26px;margin-bottom:4px;">Rainbows and Winnings</h1>
       <p style="color:var(--muted);font-size:13px;margin-top:0;margin-bottom:20px;">${mode==='signup' ? 'Create your account' : 'Sign in'}</p>
       <div class="field"><label>Email</label><input id="auth_email" type="email" data-autofocus /></div>
       <div class="field"><label>Password</label><input id="auth_password" type="password" /></div>
@@ -527,7 +527,7 @@ function downloadBackup(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'warpath-backup.json';
+  a.download = 'rainbows-and-winnings-backup.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
@@ -593,7 +593,7 @@ function render(){
   app.innerHTML = `
     <header class="top">
       <div class="title-row">
-        <h1>Warpath</h1>
+        <h1>Rainbows and Winnings</h1>
         <div style="display:flex;gap:6px;">
           <button class="btn ghost small" onclick="openSettingsModal()" style="padding:4px 8px;">Settings</button>
           <button class="btn ghost small" onclick="openBackupModal()" style="padding:4px 8px;">Backup</button>
@@ -655,6 +655,159 @@ function focusScore(a){
   const d = daysUntil(a.renewalDate);
   if(d!==null) score += Math.max(0, 90-d);
   return score;
+}
+function isThisMonth(dateStr){
+  if(!dateStr) return false;
+  const d = parseLocal(dateStr);
+  const t = today();
+  return d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth();
+}
+function atRiskContactStats(){
+  const atRisk = state.data.accounts.filter(a=>a.status==='At Risk');
+  const contacted = atRisk.filter(a=> (a.visitLog||[]).some(v=>isThisMonth(v.date)) );
+  return { total: atRisk.length, contacted: contacted.length };
+}
+function completedLast7Days(){
+  return state.data.tasks.filter(t=>t.done && t.completedAt && daysUntil(t.completedAt)!==null && daysUntil(t.completedAt)>=-7 && daysUntil(t.completedAt)<=0).length;
+}
+function weekInReviewData(){
+  const inWindow = (dateStr) => dateStr!=null && daysUntil(dateStr)!==null && daysUntil(dateStr)>=-7 && daysUntil(dateStr)<=0;
+  const activities = [];
+  state.data.accounts.forEach(a=>{
+    (a.visitLog||[]).forEach(v=>{ if(inWindow(v.date)) activities.push({ account:a, ...v }); });
+  });
+  const visits = activities.filter(x=>x.type==='Visit').length;
+  const calls = activities.filter(x=>x.type==='Call').length;
+  const emails = activities.filter(x=>x.type==='Email').length;
+  const uniqueAccountsTouched = new Set(activities.map(x=>x.account.id)).size;
+
+  const tasksCompleted = state.data.tasks.filter(t=>t.done && inWindow(t.completedAt));
+
+  const talkingPoints = [];
+  state.data.accounts.forEach(a=>{
+    (a.initiativesDiscussed||[]).forEach(e=>{
+      if(inWindow(e.date)){
+        const init = state.data.initiatives.find(i=>i.id===e.initiativeId);
+        talkingPoints.push({ account:a, initiative: init });
+      }
+    });
+  });
+
+  const marketingSent = [];
+  state.data.accounts.forEach(a=>{
+    (a.marketing||[]).forEach(m=>{ if(inWindow(m.date)) marketingSent.push({ account:a, ...m }); });
+  });
+
+  const atRiskAccounts = state.data.accounts.filter(a=>a.status==='At Risk');
+  const atRiskContacted = atRiskAccounts.filter(a=> (a.visitLog||[]).some(v=>inWindow(v.date)) );
+
+  return { activities, visits, calls, emails, uniqueAccountsTouched, tasksCompleted, talkingPoints, marketingSent,
+    atRiskTotal: atRiskAccounts.length, atRiskContactedCount: atRiskContacted.length };
+}
+function openWeekReview(){ state.ui.modal = {type:'weekReview'}; render(); }
+function weekReviewModal(){
+  const d = weekInReviewData();
+  return `<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
+      <h2>Week in review</h2>
+      <p style="font-size:12px;color:var(--muted-2);margin-top:0;">${niceDate(fmtDate(addDays(today(),-7)))} to ${niceDate(fmtDate(today()))}</p>
+
+      <div class="stat-grid">
+        <div class="stat"><div class="num">${d.activities.length}</div><div class="lbl">Touches logged</div></div>
+        <div class="stat"><div class="num">${d.uniqueAccountsTouched}</div><div class="lbl">Accounts touched</div></div>
+        <div class="stat"><div class="num">${d.tasksCompleted.length}</div><div class="lbl">Tasks completed</div></div>
+        <div class="stat"><div class="num">${d.talkingPoints.length}</div><div class="lbl">Talking points covered</div></div>
+      </div>
+
+      <div class="section-title">Activity breakdown</div>
+      <div style="font-size:13.5px;">${d.visits} visit${d.visits===1?'':'s'} · ${d.calls} call${d.calls===1?'':'s'} · ${d.emails} email${d.emails===1?'':'s'}</div>
+
+      <div class="section-title">At-risk contact rate</div>
+      <div style="font-size:13.5px;">${d.atRiskContactedCount} of ${d.atRiskTotal} at-risk account${d.atRiskTotal===1?'':'s'} contacted this week</div>
+
+      ${d.tasksCompleted.length ? `
+        <div class="section-title">Tasks completed</div>
+        ${d.tasksCompleted.map(t=>`<div style="font-size:12.5px;padding:3px 0;">✓ ${esc(t.title)}</div>`).join('')}
+      ` : ''}
+
+      ${d.talkingPoints.length ? `
+        <div class="section-title">Talking points covered</div>
+        ${d.talkingPoints.map(tp=>`<div style="font-size:12.5px;padding:3px 0;">${esc(tp.account.name)} — ${tp.initiative? esc(tp.initiative.title) : 'Unknown initiative'}</div>`).join('')}
+      ` : ''}
+
+      ${d.marketingSent.length ? `
+        <div class="section-title">Marketing sent</div>
+        ${d.marketingSent.map(m=>`<div style="font-size:12.5px;padding:3px 0;">${esc(m.account.name)} — ${esc(m.item)}</div>`).join('')}
+      ` : ''}
+
+      <button class="btn primary fab-add" style="margin-top:16px;" onclick="copyWeekReview()">Copy summary</button>
+    </div>
+  </div>`;
+}
+function buildWeekReviewSummary(){
+  const d = weekInReviewData();
+  const lines = [];
+  lines.push(`Week in review — ${niceDate(fmtDate(addDays(today(),-7)))} to ${niceDate(fmtDate(today()))}`);
+  lines.push('');
+  lines.push(`Touches logged: ${d.activities.length} (${d.visits} visits, ${d.calls} calls, ${d.emails} emails) across ${d.uniqueAccountsTouched} accounts`);
+  lines.push(`At-risk contact rate: ${d.atRiskContactedCount}/${d.atRiskTotal}`);
+  lines.push(`Tasks completed: ${d.tasksCompleted.length}`);
+  d.tasksCompleted.forEach(t=>lines.push(`- ${t.title}`));
+  lines.push(`Talking points covered: ${d.talkingPoints.length}`);
+  d.talkingPoints.forEach(tp=>lines.push(`- ${tp.account.name}: ${tp.initiative? tp.initiative.title : 'Unknown initiative'}`));
+  if(d.marketingSent.length){
+    lines.push('');
+    lines.push('Marketing sent:');
+    d.marketingSent.forEach(m=>lines.push(`- ${m.account.name}: ${m.item}`));
+  }
+  return lines.join('\n');
+}
+async function copyWeekReview(){
+  const text = buildWeekReviewSummary();
+  try{
+    await navigator.clipboard.writeText(text);
+    setSaveStatus('Summary copied');
+    setTimeout(()=>setSaveStatus('Synced'), 1500);
+  }catch(e){
+    state.ui.modal = { type:'copySummary', text };
+    render();
+  }
+}
+function momentumHTML(){
+  const stats = atRiskContactStats();
+  const streak = completedLast7Days();
+  const monthName = today().toLocaleString('en-US',{month:'long'});
+  if(stats.total===0){
+    return `
+      <div class="card" style="text-align:center;padding:20px 14px;margin-bottom:4px;">
+        <div style="font-size:34px;">🎉</div>
+        <div style="font-weight:700;font-size:15px;margin-top:4px;">Nothing at risk right now</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Nice place to be.</div>
+        ${streak>0 ? `<div style="font-size:12px;color:var(--muted-2);margin-top:10px;">🔥 ${streak} task${streak===1?'':'s'} completed this week</div>` : ''}
+      </div>
+    `;
+  }
+  const pct = Math.round((stats.contacted/stats.total)*100);
+  const allDone = stats.contacted===stats.total;
+  const r = 50, circumference = 2*Math.PI*r;
+  const offset = circumference * (1 - pct/100);
+  const ringColor = allDone ? '#4C7A5E' : '#C97A2B';
+  return `
+    <div class="card" style="text-align:center;padding:18px 14px;margin-bottom:4px;">
+      <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;">At-risk accounts contacted in ${esc(monthName)}</div>
+      <svg width="130" height="130" viewBox="0 0 120 120" style="display:block;margin:0 auto;">
+        <circle cx="60" cy="60" r="${r}" fill="none" stroke="#E7EBE6" stroke-width="12" />
+        <circle cx="60" cy="60" r="${r}" fill="none" stroke="${ringColor}" stroke-width="12"
+          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+          stroke-linecap="round" transform="rotate(-90 60 60)" style="transition:stroke-dashoffset 0.6s ease;" />
+        <text x="60" y="57" text-anchor="middle" font-size="24" font-weight="700" fill="#1F2E29" font-family="Georgia, serif">${stats.contacted}/${stats.total}</text>
+        <text x="60" y="76" text-anchor="middle" font-size="10.5" fill="#5B6B62">${pct}% this month</text>
+      </svg>
+      ${allDone ? `<div style="font-weight:700;color:var(--green);font-size:13.5px;margin-top:6px;">🎉 All caught up!</div>` : ''}
+      ${streak>0 ? `<div style="font-size:12px;color:var(--muted-2);margin-top:8px;">🔥 ${streak} task${streak===1?'':'s'} completed this week</div>` : ''}
+    </div>
+  `;
 }
 function jumpToAccount(id){
   state.ui.tab='accounts'; state.ui.search='';
@@ -726,6 +879,9 @@ function overviewHTML(){
       <div class="stat ${csmFollowUps>0?'flag-amber':''}" style="cursor:pointer;" onclick="setTab('csms')"><div class="num">${csmFollowUps}</div><div class="lbl">CSM follow-ups due</div></div>
       <div class="stat ${staleCount>0?'flag-amber':''}" style="cursor:pointer;" onclick="goToAccounts({stale:true})"><div class="num">${staleCount}</div><div class="lbl">No contact ${STALE_DAYS}+ days</div></div>
     </div>
+
+    ${momentumHTML()}
+    <button class="btn small" style="width:100%;margin-bottom:16px;" onclick="openWeekReview()">📅 Week in review</button>
 
     <div class="section-title">Right now</div>
     <div class="flist" style="margin-bottom:6px;">
@@ -1607,6 +1763,7 @@ function modalHTML(){
   if(state.ui.modal.type==='settings') return settingsModal();
   if(state.ui.modal.type==='copySummary') return copySummaryModal();
   if(state.ui.modal.type==='quickCapture') return quickCaptureModal();
+  if(state.ui.modal.type==='weekReview') return weekReviewModal();
   return '';
 }
 function openSettingsModal(){ state.ui.modal = {type:'settings'}; render(); }
@@ -2030,7 +2187,7 @@ function saveAccountForm(id){
 }
 function taskModal(){
   const isNew = state.ui.modal.id==='new';
-  const t = isNew ? { title:'', accountId:'', dueDate:'', priority:'Medium', done:false } : state.data.tasks.find(x=>x.id===state.ui.modal.id);
+  const t = isNew ? { title:'', accountId:'', dueDate: fmtDate(addDays(today(),1)), priority:'Medium', done:false } : state.data.tasks.find(x=>x.id===state.ui.modal.id);
   return `<div class="overlay" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <div class="modal-close"><button class="btn ghost small" onclick="closeModal()">Close ✕</button></div>
